@@ -6,14 +6,19 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2A6C81A13086F112006EA285 /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 2A6C81A03086F112006EA285 /* RiveRuntime */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2ABEF82330807AD300BEEB78 /* jiifoo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = jiifoo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2AC2525A3085A330003212C6 /* jiifoo-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "jiifoo-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		2ABEF82530807AD300BEEB78 /* jiifoo */ = {
+		2A4D39463081EF2200DD85AA /* EventMap */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = jiifoo;
+			path = EventMap;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -22,6 +27,7 @@
 		2ABEF82030807AD300BEEB78 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				2A6C81A13086F112006EA285 /* RiveRuntime in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -30,17 +36,10 @@
 		2ABEF81A30807AD300BEEB78 = {
 			isa = PBXGroup;
 			children = (
-				2ABEF82530807AD300BEEB78 /* jiifoo */,
-				2ABEF82430807AD300BEEB78 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		2ABEF82430807AD300BEEB78 /* Products */ = {
-			isa = PBXGroup;
-			children = (
+				2AC2525A3085A330003212C6 /* jiifoo-Info.plist */,
+				2A4D39463081EF2200DD85AA /* EventMap */,
 				2ABEF82330807AD300BEEB78 /* jiifoo.app */,
 			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -57,9 +56,12 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				2ABEF82530807AD300BEEB78 /* jiifoo */,
+				2A4D39463081EF2200DD85AA /* EventMap */,
 			);
 			name = jiifoo;
+			packageProductDependencies = (
+				2A6C81A03086F112006EA285 /* RiveRuntime */,
+			);
 			productName = jiifoo;
 			productReference = 2ABEF82330807AD300BEEB78 /* jiifoo.app */;
 			productType = "com.apple.product-type.application";
@@ -88,8 +90,11 @@
 			);
 			mainGroup = 2ABEF81A30807AD300BEEB78;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2A6C819F3086F112006EA285 /* XCRemoteSwiftPackageReference "rive-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 2ABEF82430807AD300BEEB78 /* Products */;
+			productRefGroup = 2ABEF81A30807AD300BEEB78;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -246,6 +251,8 @@
 				DEVELOPMENT_TEAM = R974XU3YX5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "jiifoo-Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "現在地表示";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -278,6 +285,8 @@
 				DEVELOPMENT_TEAM = R974XU3YX5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "jiifoo-Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "現在地表示";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -320,6 +329,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2A6C819F3086F112006EA285 /* XCRemoteSwiftPackageReference "rive-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rive-app/rive-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.28.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2A6C81A03086F112006EA285 /* RiveRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A6C819F3086F112006EA285 /* XCRemoteSwiftPackageReference "rive-ios" */;
+			productName = RiveRuntime;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2ABEF81B30807AD300BEEB78 /* Project object */;
 	validationLevel = 1;
