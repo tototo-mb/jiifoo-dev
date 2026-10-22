@@ -22,3 +22,4 @@ struct FirePinView: View {
 #Preview {
     FirePinView(isJoinable: true)
 }
+

@@ -7,11 +7,12 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 struct SupabaseTestView: View {
 
     // 入力欄
-    @State private var email = "test1@example.com"
+    @State private var email = ""
     @State private var password = "password123"
     @State private var displayName = "テスト1"
 
@@ -20,9 +21,13 @@ struct SupabaseTestView: View {
     @State private var nearby: [EventPin] = []
     @State private var isBusy = false
 
-    // テスト用の座標(東京駅付近)
-    private let testLat = 35.681236
-    private let testLng = 139.767125
+    // 現在地(iPhone の位置情報を使う)
+    @State private var locationManager = LocationManager()
+
+    // テスト用の座標:現在地がわかればそこ、わからなければ東京駅
+    private var testLat: Double { locationManager.userLocation?.latitude ?? 35.681236 }
+    private var testLng: Double { locationManager.userLocation?.longitude ?? 139.767125 }
+    private var hasLocation: Bool { locationManager.userLocation != nil }
 
     var body: some View {
         NavigationStack {
@@ -61,13 +66,26 @@ struct SupabaseTestView: View {
                 }
 
                 Section("イベント") {
+                    // 今どこを基準にしているかの表示
+                    if hasLocation {
+                        Label(String(format: "現在地: %.5f, %.5f", testLat, testLng),
+                              systemImage: "location.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("現在地を取得中…(取得できないときは東京駅を使います)",
+                              systemImage: "location.slash")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
                     Button("④ 30分後に始まるイベントを作る") {
                         run("イベント作成") {
                             let id = try await JiifooAPI.createEvent(
                                 title: "テストイベント",
                                 category: "ramen",
                                 description: "接続テスト用",
-                                placeName: "東京駅 丸の内北口",
+                                placeName: hasLocation ? "テスト用の集合場所" : "東京駅 丸の内北口",
                                 latitude: testLat,
                                 longitude: testLng,
                                 startsAt: Date().addingTimeInterval(30 * 60),

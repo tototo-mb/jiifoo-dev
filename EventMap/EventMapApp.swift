@@ -7,14 +7,25 @@ import SwiftUI
 struct EventMapApp: App {
     @State private var locationManager = LocationManager()
     @State private var eventStore = EventStore()
+    @State private var authManager = AuthManager()
 
     var body: some Scene {
         WindowGroup {
             //SupabaseTestView()//テスト用
-            MainTabView()
-                .environment(locationManager)   // どの画面からでも使えるようにする
-                .environment(eventStore)
-            
+            Group{if authManager.isChecking == true{
+                ProgressView()
+            }else if  authManager.isLoggedIn == true{
+                    MainTabView()
+                        .environment(locationManager)
+                        .environment(eventStore)
+                        .environment(authManager)
+                }else{
+                    Text("ログイン画面（仮）")
+                }
+            }
+            .task {
+                await authManager.startListening()
+            }
         }
     }
 }

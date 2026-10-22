@@ -23,9 +23,11 @@ nonisolated struct Profile: Codable, Identifiable, Sendable {
 
 nonisolated struct EventPin: Codable, Identifiable, Sendable {
     let id: UUID
+    let creatorId: UUID
     let title: String
     let category: String
     let kind: String
+    let description: String?
     let placeName: String
     let latitude: Double
     let longitude: Double
@@ -35,7 +37,8 @@ nonisolated struct EventPin: Codable, Identifiable, Sendable {
     let distanceM: Double
 
     enum CodingKeys: String, CodingKey {
-        case id, title, category, kind, latitude, longitude, capacity
+        case id, title, category, kind, description, latitude, longitude, capacity
+        case creatorId = "creator_id"
         case placeName = "place_name"
         case startsAt = "starts_at"
         case participantCount = "participant_count"
@@ -144,6 +147,25 @@ enum JiifooAPI {
             ])
             .execute()
             .value
+    }
+
+    // ログイン中のユーザーID(ログインしていなければ nil)
+    static func currentUserID() async -> UUID? {
+        try? await supabase.auth.session.user.id
+    }
+
+    // 自分が予約中(または作成した)イベントの ID 一覧
+    static func myActiveEventIDs() async throws -> Set<UUID> {
+        nonisolated struct Row: Decodable, Sendable { let event_id: UUID }
+        guard let userId = await currentUserID() else { return [] }
+        let rows: [Row] = try await supabase
+            .from("participations")
+            .select("event_id")
+            .eq("user_id", value: userId)
+            .in("status", values: ["reserved", "checked_in"])
+            .execute()
+            .value
+        return Set(rows.map(\.event_id))
     }
 
     // 参加を予約する(結果: ok / full / closed / already_reserved など)

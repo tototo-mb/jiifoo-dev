@@ -8,6 +8,7 @@ struct EventDetailView: View {
     @State private var showCancelDialog = false
 
     private var isJoined: Bool { eventStore.isJoined(event) }
+    private var isMine: Bool { eventStore.isMine(event) }
     private var distance: Double? { locationManager.distance(to: event.coordinate) }
     private var isJoinable: Bool { locationManager.isJoinable(event.coordinate) }
 
@@ -15,16 +16,21 @@ struct EventDetailView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("種類", value: event.kind)
                     LabeledContent("カテゴリ", value: event.category)
+                    LabeledContent("開始") {
+                        Text(event.startsAt, style: .time)
+                    }
+                    LabeledContent("参加者", value: "\(event.participantCount) / \(event.capacity)人")
                     LabeledContent("掲載者", value: event.scale.label)
                     LabeledContent("場所", value: event.placeName)
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
                     }
                 }
-                Section("詳細") {
-                    Text(event.description)
+                if !event.description.isEmpty {
+                    Section("詳細") {
+                        Text(event.description)
+                    }
                 }
             }            .navigationTitle(event.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -32,7 +38,7 @@ struct EventDetailView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     // 範囲外のときの説明
-                    if !isJoined && !isJoinable {
+                    if !isJoined && !isJoinable && !isMine {
                         Text(outOfRangeMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -53,7 +59,7 @@ struct EventDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(isJoined ? .green : .blue)
                     // 参加済みならキャンセルはいつでもできる。未参加なら範囲内のときだけ押せる
-                    .disabled(!isJoined && !isJoinable)
+                    .disabled(isMine || (!isJoined && (!isJoinable || event.isFull)))
                 }
                 .padding()
                 .background(.bar)
@@ -66,18 +72,29 @@ struct EventDetailView: View {
                 }
             }
             .sensoryFeedback(.success, trigger: isJoined)
+            // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)
+            .alert(eventStore.message ?? "", isPresented: Binding(
+                get: { eventStore.message != nil },
+                set: { if !$0 { eventStore.message = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            }
         }
     }
 
     // MARK: - 表示用
 
     private var buttonTitle: String {
+        if isMine { return "あなたが主催中" }
         if isJoined { return "参加予定" }
+        if event.isFull { return "満員です" }
         return isJoinable ? "参加する" : "範囲外のため参加できません"
     }
 
     private var buttonIcon: String {
+        if isMine { return "flame.fill" }
         if isJoined { return "checkmark.circle.fill" }
+        if event.isFull { return "person.3.fill" }
         return isJoinable ? "person.badge.plus" : "location.slash"
     }
 
@@ -92,6 +109,6 @@ struct EventDetailView: View {
 
 #Preview {
     EventDetailView(event: sampleEvents[0])
-        .environment(EventStore())
+        .environment(EventStore(events: sampleEvents))
         .environment(LocationManager())
 }

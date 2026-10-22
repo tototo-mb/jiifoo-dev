@@ -30,23 +30,63 @@ struct EventMapView: View {
             .mapStyle(.standard(elevation: .realistic,
                                 emphasis: .muted,
                                 pointsOfInterest: .excludingAll))
+            .onMapCameraChange(frequency: .onEnd) { context in
+                Task { await eventStore.load(near: context.region.center) }
+            }
             .ignoresSafeArea()
-            ScreenEdgeGlowView()
-            // 現在地ボタン（右下）
-            Button {
-                withAnimation {
-                    cameraPosition = .userLocation(fallback: .automatic)
+            //ScreenEdgeGlowView()
+
+            // 読み込み中の表示(上部中央)
+            if eventStore.isLoading {
+                ProgressView()
+                    .padding(10)
+                    .background(.regularMaterial, in: Capsule())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 8)
+            }
+            VStack(spacing: 12) {
+                // 再読み込みボタン
+                Button {
+                    if let userLocation = locationManager.userLocation {
+                        Task { await eventStore.load(near: userLocation, force: true) }
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: 50, height: 50)
+                        .background(.regularMaterial, in: Circle())
+                        .shadow(radius: 3)
                 }
-            } label: {
-                Image(systemName: cameraPosition.followsUserLocation ? "location.fill" : "location")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                    .frame(width: 50, height: 50)
-                    .background(.regularMaterial, in: Circle())
-                    .shadow(radius: 3)
+
+                // 現在地ボタン（右下）
+                Button {
+                    withAnimation {
+                        cameraPosition = .userLocation(fallback: .automatic)
+                    }
+                } label: {
+                    Image(systemName: cameraPosition.followsUserLocation ? "location.fill" : "location")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: 50, height: 50)
+                        .background(.regularMaterial, in: Circle())
+                        .shadow(radius: 3)
+                }
             }
             .padding(.trailing, 16)
             .padding(.bottom, 24)
+        }
+        .task(id: locationManager.userLocation == nil) {
+            if let userLocation = locationManager.userLocation {
+                await eventStore.load(near: userLocation)
+            }
+        }
+        // 予約結果やエラーのお知らせ
+        .alert(eventStore.message ?? "", isPresented: Binding(
+            get: { eventStore.message != nil && selectedEventID == nil },
+            set: { if !$0 { eventStore.message = nil } }
+        )) {
+            Button("OK", role: .cancel) { }
         }
         .onChange(of: locationManager.authorizationStatus) { _, status in
             // 許可されたら改めて現在地へカメラを合わせる
@@ -80,5 +120,5 @@ struct EventMapView: View {
 #Preview {
     EventMapView()
         .environment(LocationManager())
-        .environment(EventStore())
+        .environment(EventStore(events: sampleEvents))
 }
