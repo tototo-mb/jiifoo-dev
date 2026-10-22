@@ -13,8 +13,8 @@ struct NearbyEventListView: View {
         let filtered = eventStore.events.filter { event in
             searchText.isEmpty
             || event.title.contains(searchText)
-            || event.place.contains(searchText)
-            || event.detail.contains(searchText)
+            || event.placeName.contains(searchText)
+            || event.description.contains(searchText)
         }
         return filtered.sorted { a, b in
             let da = locationManager.distance(to: a.coordinate) ?? .greatestFiniteMagnitude

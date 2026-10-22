@@ -21,18 +21,12 @@ struct EventRow: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
 
-                if !event.date.isEmpty {
-                    Label(event.date, systemImage: "calendar")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Label(event.place, systemImage: "mappin.and.ellipse")
+                Label(event.placeName, systemImage: "mappin.and.ellipse")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 8) {
-                    Text(event.user)
+                    Text(event.category)          // 投稿者名の代わりにカテゴリを表示
                         .lineLimit(1)
                     if isJoined {
                         Text("参加予定")
@@ -45,7 +39,6 @@ struct EventRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-
             Spacer(minLength: 0)
 
             // 右上に距離

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2A6C81A13086F112006EA285 /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 2A6C81A03086F112006EA285 /* RiveRuntime */; };
+		2A72327430884BD200AD7F38 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 2A72327330884BD200AD7F38 /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +28,7 @@
 		2ABEF82030807AD300BEEB78 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				2A72327430884BD200AD7F38 /* Supabase in Frameworks */,
 				2A6C81A13086F112006EA285 /* RiveRuntime in Frameworks */,
 			);
 		};
@@ -61,6 +63,7 @@
 			name = jiifoo;
 			packageProductDependencies = (
 				2A6C81A03086F112006EA285 /* RiveRuntime */,
+				2A72327330884BD200AD7F38 /* Supabase */,
 			);
 			productName = jiifoo;
 			productReference = 2ABEF82330807AD300BEEB78 /* jiifoo.app */;
@@ -92,6 +95,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				2A6C819F3086F112006EA285 /* XCRemoteSwiftPackageReference "rive-ios" */,
+				2A72327230884BD200AD7F38 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2ABEF81A30807AD300BEEB78;
@@ -339,6 +343,14 @@
 				minimumVersion = 6.28.1;
 			};
 		};
+		2A72327230884BD200AD7F38 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -346,6 +358,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2A6C819F3086F112006EA285 /* XCRemoteSwiftPackageReference "rive-ios" */;
 			productName = RiveRuntime;
+		};
+		2A72327330884BD200AD7F38 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A72327230884BD200AD7F38 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

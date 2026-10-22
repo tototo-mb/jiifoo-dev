@@ -8,21 +8,22 @@ struct EventMapView: View {
 
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selectedEventID: Event.ID?
+    
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Map(position: $cameraPosition, selection: $selectedEventID) {
                 UserAnnotation()
-                if let userLocation=locationManager.userLocation {
-                    MapCircle(center: userLocation,radius: LocationManager.joinableRadius)
+                if let userLocation = locationManager.userLocation {
+                    MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
                         .foregroundStyle(.blue.opacity(0.08))
-                        .stroke(.blue.opacity(0.5),lineWidth: 1.5)
+                        .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
-                
+
                 ForEach(eventStore.events) { event in
-                    Marker(event.title, coordinate: event.coordinate)
-                        .tint(locationManager.isJoinable(event.coordinate) ? event.scale.color:.gray)
-                        .tag(event.id)
+                    Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
+                        eventPin(for: event)
+                    }
                 }
             }
             .mapControls { }
@@ -30,7 +31,7 @@ struct EventMapView: View {
                                 emphasis: .muted,
                                 pointsOfInterest: .excludingAll))
             .ignoresSafeArea()
-
+            ScreenEdgeGlowView()
             // 現在地ボタン（右下）
             Button {
                 withAnimation {
@@ -60,8 +61,19 @@ struct EventMapView: View {
         )) { event in
             EventDetailView(event: event)
                 .environment(eventStore)
+                .environment(locationManager)
                 .presentationDetents([.medium, .large])
         }
+    }
+
+    // ピン1つ分の見た目（body の外、EventMapView の中に置く）
+    private func eventPin(for event: Event) -> some View {
+        let joinable = locationManager.isJoinable(event.coordinate)
+        return FirePinView(isJoinable: joinable)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedEventID = event.id   // タップで詳細シートを開く
+            }
     }
 }
 

@@ -9,7 +9,8 @@ struct FirePinView: View {
         stateMachineName: "State Machine 1",
         artboardName: "FireParticleSystem"
     )
-
+@State private var isLoaded=false
+    
     var body: some View {
         riveViewModel.view()
             .frame(width: 60, height: 60)

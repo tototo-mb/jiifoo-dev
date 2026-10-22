@@ -19,7 +19,7 @@ struct ProfileView: View {
     @State private var selectedTab: ProfileTab = .posted
     @State private var selectedEvent: Event?
 
-    private var postedEvents: [Event] { eventStore.events(postedBy: myName) }
+    private var postedEvents: [Event] {[]}
 
     private var gridEvents: [Event] {
         selectedTab == .posted ? postedEvents : eventStore.joinedEvents
@@ -49,7 +49,7 @@ struct ProfileView: View {
                     // 3列のグリッド
                     if gridEvents.isEmpty {
                         ContentUnavailableView(
-                            selectedTab == .posted ? "掲載したイベントはありません" : "参加予定のイベントはありません",
+                            selectedTab == .posted ? "掲載したイベント" : "参加したイベントはありません",
                             systemImage: "calendar.badge.exclamationmark")
                             .padding(.top, 24)
                     } else {

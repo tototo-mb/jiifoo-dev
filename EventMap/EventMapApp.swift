@@ -10,9 +10,11 @@ struct EventMapApp: App {
 
     var body: some Scene {
         WindowGroup {
+            //SupabaseTestView()//テスト用
             MainTabView()
                 .environment(locationManager)   // どの画面からでも使えるようにする
                 .environment(eventStore)
+            
         }
     }
 }

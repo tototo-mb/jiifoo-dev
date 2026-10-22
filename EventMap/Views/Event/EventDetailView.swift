@@ -15,21 +15,18 @@ struct EventDetailView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("掲載ユーザー", value: event.user)
-                    LabeledContent("種類", value: event.scale.label)
-                    if !event.date.isEmpty {
-                        LabeledContent("日時", value: event.date)
-                    }
-                    LabeledContent("場所", value: event.place)
+                    LabeledContent("種類", value: event.kind)
+                    LabeledContent("カテゴリ", value: event.category)
+                    LabeledContent("掲載者", value: event.scale.label)
+                    LabeledContent("場所", value: event.placeName)
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
                     }
                 }
                 Section("詳細") {
-                    Text(event.detail)
+                    Text(event.description)
                 }
-            }
-            .navigationTitle(event.title)
+            }            .navigationTitle(event.title)
             .navigationBarTitleDisplayMode(.inline)
             // 画面下に参加ボタンを固定
             .safeAreaInset(edge: .bottom) {

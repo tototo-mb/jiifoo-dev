@@ -27,7 +27,7 @@ final class EventStore {
     }
 
     // 指定したユーザーが掲載したイベント一覧（マイページで使用）
-    func events(postedBy user: String) -> [Event] {
-        events.filter { $0.user == user }
+    func events(postedBy creatorID:UUID) -> [Event] {
+        events.filter { $0.creatorID == creatorID }
     }
 }
