@@ -20,7 +20,7 @@ struct EventMapApp: App {
                         .environment(eventStore)
                         .environment(authManager)
                 }else{
-                    Text("ログイン画面（仮）")
+                    LoginView()
                 }
             }
             .task {
