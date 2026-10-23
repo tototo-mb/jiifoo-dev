@@ -18,6 +18,7 @@ struct ProfileView: View {
 
     @State private var selectedTab: ProfileTab = .posted
     @State private var selectedEvent: Event?
+    @State private var showLogoutDialog=false
 
     private var postedEvents: [Event] {[]}
 
@@ -71,10 +72,22 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        // 設定画面（後で作成）
+                    Menu {
+                        // 設定画面
+                        Button("ログアウト",systemImage: "rectangle.portrait.and.arrow.right",
+                               role: .destructive){
+                            showLogoutDialog=true
+                        }
                     } label: {
                         Image(systemName: "line.3.horizontal")
+                        
+                    }
+                }
+            }
+            .confirmationDialog("ログアウトしますか？", isPresented:$showLogoutDialog, titleVisibility:.visible){
+                Button("ログアウト",role: .destructive){
+                    Task{
+                        try? await JiifooAPI.signOut()
                     }
                 }
             }
