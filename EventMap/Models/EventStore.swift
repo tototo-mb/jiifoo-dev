@@ -14,12 +14,18 @@ final class EventStore {
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
 
+
+    
+    //完成までサンプルデータ表示
+    static let showSampleEvents=true
+    
     // 最後に読み込んだ場所(少し動いただけでは読み直さないため)
     @ObservationIgnored private var lastLoadedCenter: CLLocation?
 
     init(events: [Event] = []) {
         self.events = events
     }
+    
 
     // MARK: - 読み込み
 
@@ -36,7 +42,8 @@ final class EventStore {
             myUserID = await JiifooAPI.currentUserID()
             async let pins = JiifooAPI.nearbyEvents(latitude: center.latitude, longitude: center.longitude)
             async let joined = JiifooAPI.myActiveEventIDs()
-            events = try await pins.map(Event.init(pin:))
+            let serverEvents=try await pins.map(Event.init(pin: ))
+            events=serverEvents + (Self.showSampleEvents ? sampleEvents :[])
             joinedEventIDs = try await joined
         } catch {
             message = "イベントを読み込めませんでした"
