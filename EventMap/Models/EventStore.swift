@@ -17,7 +17,7 @@ final class EventStore {
 
     
     //完成までサンプルデータ表示
-    static let showSampleEvents=true
+    static let showSampleEvents=false
     
     // 最後に読み込んだ場所(少し動いただけでは読み直さないため)
     @ObservationIgnored private var lastLoadedCenter: CLLocation?

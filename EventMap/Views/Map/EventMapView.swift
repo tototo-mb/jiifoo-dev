@@ -107,13 +107,21 @@ struct EventMapView: View {
     }
 
     // ピン1つ分の見た目（body の外、EventMapView の中に置く）
+    //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
+    @ViewBuilder
     private func eventPin(for event: Event) -> some View {
         let joinable = locationManager.isJoinable(event.coordinate)
-        return FirePinView(isJoinable: joinable)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                selectedEventID = event.id   // タップで詳細シートを開く
+        Group{
+            if event.scale == .businessMode{
+                BusinessPinView(isJoinable: joinable)
+            }else{
+                PrivatePinView(isJoinable: joinable)
             }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture{
+            selectedEventID=event.id
+        }
     }
 }
 

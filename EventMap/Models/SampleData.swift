@@ -14,12 +14,14 @@ let sampleEvents: [Event] = [
     ),
     
     Event(kind: "個人ユーザー",
-          title: "池工祭",
-          category: "文化祭",
+          title: "test",
+          category: "test",
           description: "誰でも参加してください！",
-          placeName: "池田工業高校",
-          latitude: 36.4136193,
-          longitude: 137.8792451,
+          placeName: "testPlace",
+          latitude: 36.2283660,
+          longitude: 137.9677965,
           scale: .privateMode
          )
+    
+    
 ]

@@ -2,7 +2,6 @@ import SwiftUI
 
 // アプリの起動ファイル
 // ※ 新規プロジェクトで自動作成された「〇〇App.swift」の中身を、このファイルの内容に置き換えてください。
-//    （このファイルを追加して元のファイルも残すと @main が2つになりエラーになります）
 @main
 struct EventMapApp: App {
     @State private var locationManager = LocationManager()
