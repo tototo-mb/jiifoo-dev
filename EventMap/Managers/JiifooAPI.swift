@@ -32,7 +32,7 @@ nonisolated struct EventPin: Codable, Identifiable, Sendable {
     let latitude: Double
     let longitude: Double
     let startsAt: Date
-    let capacity: Int
+    let capacity: Int?
     let participantCount: Int
     let distanceM: Double
 
@@ -56,7 +56,7 @@ nonisolated struct NewEvent: Encodable, Sendable {
     let placeName: String
     let location: String      // "SRID=4326;POINT(経度 緯度)" の形式
     let startsAt: Date
-    let capacity: Int
+    let capacity: Int?
 
     enum CodingKeys: String, CodingKey {
         case title, category, description, location, capacity
@@ -113,7 +113,7 @@ enum JiifooAPI {
         latitude: Double,
         longitude: Double,
         startsAt: Date,
-        capacity: Int
+        capacity: Int?
     ) async throws -> UUID {
         let userId = try await supabase.auth.session.user.id
         let event = NewEvent(

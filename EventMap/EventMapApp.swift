@@ -7,6 +7,7 @@ struct EventMapApp: App {
     @State private var locationManager = LocationManager()
     @State private var eventStore = EventStore()
     @State private var authManager = AuthManager()
+    
 
     var body: some Scene {
         WindowGroup {

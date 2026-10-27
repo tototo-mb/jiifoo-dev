@@ -16,11 +16,12 @@ struct EventDetailView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("カテゴリ", value: event.category)
+                    //LabeledContent("カテゴリ", value: event.category)
                     LabeledContent("開始") {
-                        Text(event.startsAt, style: .time)
+                        Text(event.startsAt, format: .dateTime.year().month().day().hour().minute())
                     }
-                    LabeledContent("参加者", value: "\(event.participantCount) / \(event.capacity)人")
+                    LabeledContent("参加者", value: event.capacity.map {"\(event.participantCount)/ \($0)人"}
+                                   ?? "\(event.participantCount)人(上限なし)")
                     LabeledContent("掲載者", value: event.scale.label)
                     LabeledContent("場所", value: event.placeName)
                     if let distance {

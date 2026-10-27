@@ -16,14 +16,17 @@ struct Event: Identifiable, Sendable {
     let longitude: Double
     let scale: EventScale
     let startsAt: Date            // 開始時刻
-    let capacity: Int             // 募集人数(作成者を含まない)
+    let capacity: Int?             // 募集人数(作成者を含まない)
     let participantCount: Int     // 現在の参加人数(作成者を含まない)
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    var isFull: Bool { participantCount >= capacity }
+    var isFull: Bool {
+        guard let capacity else {return false}
+        return participantCount >= capacity
+    }
 
     // サンプルデータ・プレビュー用(既存の SampleData.swift がそのまま使える)
     init(
@@ -39,7 +42,7 @@ struct Event: Identifiable, Sendable {
         longitude: Double,
         scale: EventScale,
         startsAt: Date = Date().addingTimeInterval(30 * 60),
-        capacity: Int = 5,
+        capacity: Int? = 5,
         participantCount: Int = 0
     ) {
         self.id = id

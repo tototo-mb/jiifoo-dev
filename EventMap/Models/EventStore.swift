@@ -126,7 +126,7 @@ final class EventStore {
         placeName: String,
         coordinate: CLLocationCoordinate2D,
         startsAt: Date,
-        capacity: Int
+        capacity: Int?
     ) async -> Bool {
         do {
             //Supabaseにイベントを送る

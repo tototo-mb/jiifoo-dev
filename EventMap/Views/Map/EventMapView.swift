@@ -8,6 +8,7 @@ struct EventMapView: View {
 
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selectedEventID: Event.ID?
+    @State private var showCreateEvent=false
     
 
     var body: some View {
@@ -58,6 +59,17 @@ struct EventMapView: View {
                         .background(.regularMaterial, in: Circle())
                         .shadow(radius: 3)
                 }
+                //イベント作成ボタン
+                Button {
+                    showCreateEvent=true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: 50, height: 50)
+                        .background(.regularMaterial, in: Circle())
+                        .shadow(radius: 3)
+                }
 
                 // 現在地ボタン（右下）
                 Button {
@@ -83,7 +95,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil },
+            get: { eventStore.message != nil && selectedEventID == nil && selectedEventID == nil },
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
