@@ -31,9 +31,6 @@ struct EventMapView: View {
             .mapStyle(.standard(elevation: .realistic,
                                 emphasis: .muted,
                                 pointsOfInterest: .excludingAll))
-            .onMapCameraChange(frequency: .onEnd) { context in
-                Task { await eventStore.load(near: context.region.center) }
-            }
             .ignoresSafeArea()
             //ScreenEdgeGlowView()
 
@@ -70,6 +67,7 @@ struct EventMapView: View {
                         .background(.regularMaterial, in: Circle())
                         .shadow(radius: 3)
                 }
+                .disabled(locationManager.userLocation==nil)
 
                 // 現在地ボタン（右下）
                 Button {
@@ -95,7 +93,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && selectedEventID == nil },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -116,7 +114,14 @@ struct EventMapView: View {
                 .environment(locationManager)
                 .presentationDetents([.medium, .large])
         }
+        // ＋ボタンが押されたら作成画面を表示   ← ここから追加
+        .sheet(isPresented: $showCreateEvent) {
+            CreateEventView()
+                .environment(eventStore)
+                .environment(locationManager)
+        }
     }
+    
 
     // ピン1つ分の見た目（body の外、EventMapView の中に置く）
     //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
