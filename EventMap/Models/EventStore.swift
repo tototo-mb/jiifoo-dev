@@ -117,6 +117,41 @@ final class EventStore {
             await reload()
         }
     }
+    
+    //イベントを作る
+    func create(
+        title: String,
+        category: String,
+        description: String,
+        placeName: String,
+        coordinate: CLLocationCoordinate2D,
+        startsAt: Date,
+        capacity: Int
+    ) async -> Bool {
+        do {
+            //Supabaseにイベントを送る
+            _ = try await JiifooAPI.createEvent(
+                title: title,
+                category: category,
+                description: description,
+                placeName: placeName,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude,
+                startsAt: startsAt,
+                capacity: capacity
+            )
+            // ② 地図を読み込み直す
+            await load(near: coordinate,force: true)
+            // ③ 成功を返す
+            return true
+        } catch {
+            // ④ エラーのメッセージを入れる
+            message="イベント作成に失敗しました"
+            print("イベント作成に失敗：",error)
+            // ⑤ 失敗を返す
+            return false
+        }
+    }
 
     // MARK: - 一覧(マイページで使用)
 
@@ -131,3 +166,5 @@ final class EventStore {
         events.filter { $0.creatorID == creatorID }
     }
 }
+
+ 
