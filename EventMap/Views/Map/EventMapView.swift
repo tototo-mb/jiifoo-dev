@@ -86,7 +86,7 @@ struct EventMapView: View {
             .padding(.trailing, 16)
             .padding(.bottom, 24)
         }
-        .task(id: locationManager.userLocation == nil) {
+        .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
                 await eventStore.load(near: userLocation)
             }
@@ -125,6 +125,13 @@ struct EventMapView: View {
 
     // ピン1つ分の見た目（body の外、EventMapView の中に置く）
     //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
+    
+    
+    // 現在地をおよそ100m単位に丸めた目印。これが変わったら読み込み直す
+    private var locationKey: String {
+        guard let l = locationManager.userLocation else { return "none" }
+        return String(format: "%.3f,%.3f", l.latitude, l.longitude)
+    }
     @ViewBuilder
     private func eventPin(for event: Event) -> some View {
         let joinable = locationManager.isJoinable(event.coordinate)

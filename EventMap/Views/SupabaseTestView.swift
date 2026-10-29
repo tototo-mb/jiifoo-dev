@@ -89,7 +89,8 @@ struct SupabaseTestView: View {
                                 latitude: testLat,
                                 longitude: testLng,
                                 startsAt: Date().addingTimeInterval(30 * 60),
-                                capacity: 3
+                                capacity: 3,
+                                organizationId:  nil
                             )
                             return "作成しました ID: \(id.uuidString.prefix(8))…"
                         }
@@ -113,8 +114,7 @@ struct SupabaseTestView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(event.title).font(.headline)
-                                    Text("\(event.placeName) ・ \(event.participantCount)/\(event.capacity)人 ・ \(Int(event.distanceM))m")
-                                        .font(.caption)
+                                    Text("\(event.placeName) ・ \(event.participantCount)/\(event.capacity.map { "\($0)" } ?? "上限なし")人 ・ \(Int(event.distanceM))m")                                        .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Text(event.startsAt, style: .time)
                                         .font(.caption)

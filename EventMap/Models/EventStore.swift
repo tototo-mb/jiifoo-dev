@@ -126,7 +126,8 @@ final class EventStore {
         placeName: String,
         coordinate: CLLocationCoordinate2D,
         startsAt: Date,
-        capacity: Int?
+        capacity: Int?,
+        organizationId:UUID?
     ) async -> Bool {
         do {
             //Supabaseにイベントを送る
@@ -138,10 +139,11 @@ final class EventStore {
                 latitude: coordinate.latitude,
                 longitude: coordinate.longitude,
                 startsAt: startsAt,
-                capacity: capacity
+                capacity: capacity,
+                organizationId: organizationId
             )
             // ② 地図を読み込み直す
-            await load(near: coordinate,force: true)
+            await reload()
             // ③ 成功を返す
             return true
         } catch {
