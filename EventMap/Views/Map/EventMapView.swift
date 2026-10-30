@@ -9,13 +9,14 @@ struct EventMapView: View {
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selectedEventID: Event.ID?
     @State private var showCreateEvent=false
+    @AppStorage("showJoinableRange") private var showJoinableRange=true
     
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Map(position: $cameraPosition, selection: $selectedEventID) {
                 UserAnnotation()
-                if let userLocation = locationManager.userLocation {
+                if showJoinableRange, let userLocation = locationManager.userLocation {
                     MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
                         .foregroundStyle(.blue.opacity(0.08))
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)

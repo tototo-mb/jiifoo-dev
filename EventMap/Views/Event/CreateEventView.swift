@@ -9,13 +9,17 @@ enum PlaceMode: String, CaseIterable, Identifiable {
 }
 
 struct CreateEventView: View {
+    // true:法人用のタブとして表示(閉じる操作がなく、作成後は入力欄を空に戻す)
+    // false:マップの＋ボタンからシートとして表示
+    var isTab: Bool = false
+
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
     @State private var description = ""
-    @State private var placeName = ""            // 集合場所の名前(表示用。例:松本駅 お城口 改札前)
+    @State private var placeName = ""            // 集合場所の名前
     @State private var startsAt = Date().addingTimeInterval(30 * 60)
     @State private var capacity = 3
     @State private var isSaving = false
@@ -32,6 +36,8 @@ struct CreateEventView: View {
     // 誰として作るか(法人に所属している人だけ選べる)
     @State private var organizations: [Organization] = []   // 投稿できる法人
     @State private var postAs: Organization?                // nil なら個人として作る
+
+    @State private var showCreatedAlert = false            // タブ表示のとき「作成しました」を出す
 
     private var isCorporate: Bool { postAs != nil }
 
@@ -143,8 +149,11 @@ struct CreateEventView: View {
             .navigationTitle("イベントを作成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                // シートのときだけ「キャンセル」を出す(タブには閉じる先がない)
+                if !isTab {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("キャンセル") { dismiss() }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("作成") { save() }
@@ -155,6 +164,13 @@ struct CreateEventView: View {
             // 開いたときに、投稿できる法人の一覧を読み込む
             .task {
                 organizations = (try? await JiifooAPI.myPostableOrganizations()) ?? []
+                // 法人用のタブでは、最初から自分の法人を「作成者」に選んでおく
+                if isTab, postAs == nil {
+                    postAs = organizations.first
+                }
+            }
+            .alert("イベントを作成しました", isPresented: $showCreatedAlert) {
+                Button("OK", role: .cancel) { }
             }
             // 「マップ上から選択」で開く全画面の地図
             .fullScreenCover(isPresented: $showMapPicker) {
@@ -196,10 +212,27 @@ struct CreateEventView: View {
                 organizationId: postAs?.id        // 法人として作るときだけ法人IDを送る
             )
             isSaving = false
-            if success {
+            guard success else { return }
+            if isTab {
+                resetForm()               // タブでは画面を閉じずに入力欄を空に戻す
+                showCreatedAlert = true
+            } else {
                 dismiss()
             }
         }
+    }
+
+    // 入力欄を最初の状態に戻す(作成者の選択はそのまま)
+    private func resetForm() {
+        title = ""
+        description = ""
+        placeName = ""
+        searchQuery = ""
+        searchResults = []
+        pickedCoordinate = nil
+        startsAt = Date().addingTimeInterval(30 * 60)
+        capacity = 3
+        hasCapacityLimit = true
     }
 
     // 住所・地名で検索する
