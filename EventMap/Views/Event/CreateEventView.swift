@@ -12,6 +12,8 @@ struct CreateEventView: View {
     // true:法人用のタブとして表示(閉じる操作がなく、作成後は入力欄を空に戻す)
     // false:マップの＋ボタンからシートとして表示
     var isTab: Bool = false
+    //閉じるボタン
+    var onClose:(()-> Void)? = nil
 
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
@@ -150,9 +152,14 @@ struct CreateEventView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // シートのときだけ「キャンセル」を出す(タブには閉じる先がない)
-                if !isTab {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("キャンセル") { dismiss() }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(isTab ? "閉じる" : "キャンセル") {
+                        if isTab { resetForm() }
+                        if let onClose {
+                            onClose()      // タブ:マップのタブへ戻る
+                        } else {
+                            dismiss()      // シート:画面を閉じる
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
