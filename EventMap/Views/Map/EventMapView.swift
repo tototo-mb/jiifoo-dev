@@ -16,16 +16,14 @@ struct EventMapView: View {
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var mapProxy: MapProxy?              // 画面の位置 ⇔ 地図の座標の変換用
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
-    // マイページの設定「参加できる範囲を表示」(初期値は表示する)
-    @AppStorage("showJoinableRange") private var showJoinableRange = true
-
+    
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             MapReader { proxy in
                 Map(position: $cameraPosition, selection: $selectedEventID) {
                     UserAnnotation()
-                    if showJoinableRange, let userLocation = locationManager.userLocation {
+                    if let userLocation = locationManager.userLocation {
                         MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
                             .foregroundStyle(.blue.opacity(0.08))
                             .stroke(.blue.opacity(0.5), lineWidth: 1.5)
@@ -42,7 +40,8 @@ struct EventMapView: View {
                                     emphasis: .muted,
                                     pointsOfInterest: .excludingAll))
                 .onMapCameraChange(frequency: .onEnd) { context in
-                    lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
+                    lastCamera = context.camera
+                    Task { await eventStore.load(near: context.region.center) }
                 }
                 .ignoresSafeArea()
                 .onAppear { mapProxy = proxy }
@@ -142,12 +141,6 @@ struct EventMapView: View {
         }
     }
 
-    // 現在地をおよそ100m単位に丸めた目印。これが変わったら読み込み直す
-    private var locationKey: String {
-        guard let l = locationManager.userLocation else { return "none" }
-        return String(format: "%.3f,%.3f", l.latitude, l.longitude)
-    }
-
     // ピン1つ分の見た目（body の外、EventMapView の中に置く）
     //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
     @ViewBuilder
@@ -179,7 +172,6 @@ struct EventMapView: View {
     private let orbitStep: Double = 15        // 1回で回る角度(度)
     private let orbitSeconds: Double = 3.3    // 1回にかける秒数（大きいほどゆっくり）
     private let pinScreenRatio: CGFloat = 0.25 // ピンを置きたい位置（上から1/4）
-    private let homeDistance: Double = 2000   // 現在地ボタンで戻るときの高さ(m)。小さいほど拡大
 
     // ピンを選んだとき：斜めから寄る → ゆっくり回り続ける
     private func flyToEvent(_ event: Event) {
@@ -279,7 +271,7 @@ struct EventMapView: View {
             if let userLocation = locationManager.userLocation {
                 withAnimation(.easeInOut(duration: 1.0)) {
                     cameraPosition = .camera(MapCamera(centerCoordinate: userLocation,
-                                                       distance: homeDistance,   // 毎回同じ縮尺で戻る
+                                                       distance: lastCamera?.distance ?? 3000,
                                                        heading: 0,
                                                        pitch: 0))
                 }
@@ -299,3 +291,4 @@ struct EventMapView: View {
         .environment(LocationManager())
         .environment(EventStore(events: sampleEvents))
 }
+
