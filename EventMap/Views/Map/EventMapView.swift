@@ -38,7 +38,17 @@ struct EventMapView: View {
                 .mapControls { }
                 .mapStyle(.standard(elevation: .realistic,
                                     emphasis: .muted,
-                                    pointsOfInterest: .excludingAll))
+                                    pointsOfInterest: .including([
+                                        .publicTransport,   // 駅・バス停
+                                        .park,              // 公園
+                                        .landmark,          // ランドマーク
+                                        .castle,            // 城・史跡
+                                        .stadium,           // スタジアム・競技場
+                                        .university,        // 大学
+                                        .police,             // 交番・警察
+                                        .museum,
+                                        .theater
+                                    ])))
                 .onMapCameraChange(frequency: .onEnd) { context in
                     lastCamera = context.camera
                     Task { await eventStore.load(near: context.region.center) }
@@ -166,6 +176,11 @@ struct EventMapView: View {
     }
 
     // MARK: - 3Dカメラ
+    // 現在地をおよそ100m単位に丸めた値。これが変わると .task が動き直す
+    private var locationKey: String {
+        guard let location = locationManager.userLocation else { return "none" }
+        return String(format: "%.3f,%.3f", location.latitude, location.longitude)
+    }
 
     private let orbitDistance: Double = 800   // 近づく距離(m)
     private let orbitPitch: Double = 60       // 傾き(度)

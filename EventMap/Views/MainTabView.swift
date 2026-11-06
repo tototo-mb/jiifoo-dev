@@ -16,9 +16,7 @@ struct MainTabView: View {
             
             if authManager.isCorporate{
                 //
-                CreateEventView(isTab: true,onClose: {
-                    selectedTab = 0
-                })
+                CreateEventView()
                     .tabItem{
                         Image(systemName: "plus.circle")
                         Text("イベント作成")

@@ -154,6 +154,14 @@ final class EventStore {
             return false
         }
     }
+    func reset(){
+        events=[]
+        joinedEventIDs = []
+        myUserID = nil
+        message = nil
+        lastLoadedCenter = nil
+    }
+    
 
     // MARK: - 一覧(マイページで使用)
 

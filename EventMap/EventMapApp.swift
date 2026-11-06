@@ -26,6 +26,11 @@ struct EventMapApp: App {
             .task {
                 await authManager.startListening()
             }
+            .onChange(of: authManager.isLoggedIn){_,isLoggedIn in
+                if !isLoggedIn{
+                    eventStore.reset()
+                }
+            }
         }
     }
 }
