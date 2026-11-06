@@ -81,6 +81,7 @@ struct EventMapView: View {
                         .background(.regularMaterial, in: Circle())
                         .shadow(radius: 3)
                 }
+                .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
 
                 // 現在地ボタン（右下）
                 Button {
@@ -97,14 +98,15 @@ struct EventMapView: View {
             .padding(.trailing, 16)
             .padding(.bottom, 24)
         }
-        .task(id: locationManager.userLocation == nil) {
+        // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
+        .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
                 await eventStore.load(near: userLocation)
             }
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && selectedEventID == nil },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }

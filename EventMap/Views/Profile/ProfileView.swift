@@ -5,12 +5,14 @@ import SwiftUI
 // ③ インスタ風マイページ
 struct ProfileView: View {
     @Environment(EventStore.self) private var eventStore
+    @AppStorage("showJoinableRange") private var showJoinableRange = true
 
     // 仮のユーザー情報（ログイン機能ができたら差し替え）
     private let myName = "ユーザー名"
     private let bio = "自己紹介テキスト"
     private let followerCount = 0
-
+    
+    
     enum ProfileTab: String, CaseIterable {
         case posted = "過去に参加したイベント"
         case joined = "参加予定"
@@ -18,7 +20,7 @@ struct ProfileView: View {
 
     @State private var selectedTab: ProfileTab = .posted
     @State private var selectedEvent: Event?
-    @State private var showLogoutDialog=false
+    @State private var showSettings=false
 
     private var postedEvents: [Event] {[]}
 
@@ -72,30 +74,20 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        // 設定画面
-                        Button("ログアウト",systemImage: "rectangle.portrait.and.arrow.right",
-                               role: .destructive){
-                            showLogoutDialog=true
-                        }
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                        
+                    Button{
+                        showSettings=true
+                    }label:{
+                        Image(systemName: "gearshape")
                     }
                 }
             }
-            .confirmationDialog("ログアウトしますか？", isPresented:$showLogoutDialog, titleVisibility:.visible){
-                Button("ログアウト",role: .destructive){
-                    Task{
-                        try? await JiifooAPI.signOut()
-                    }
-                }
+                    .sheet(isPresented :$showSettings) { SettingsView()
             }
-            .sheet(item: $selectedEvent) { event in
-                EventDetailView(event: event)
-                    .environment(eventStore)
-                    .presentationDetents([.medium, .large])
-            }
+        }
+        .sheet(item: $selectedEvent){
+            event in EventDetailView(event: event)
+                .environment(eventStore)
+                .presentationDetents([.medium,.large])
         }
     }
 }

@@ -45,11 +45,17 @@ nonisolated struct EventPin: Codable, Identifiable, Sendable {
         case distanceM = "distance_m"
     }
 }
+//法人
+nonisolated struct Organization:Codable,Identifiable,Hashable,Sendable{
+    let id: UUID
+    let name:String
+}
 
 // MARK: - データの形(Supabase に送る)
 
 nonisolated struct NewEvent: Encodable, Sendable {
     let creatorId: UUID
+    let organizationId:UUID?
     let title: String
     let category: String
     let description: String?
@@ -61,6 +67,7 @@ nonisolated struct NewEvent: Encodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case title, category, description, location, capacity
         case creatorId = "creator_id"
+        case organizationId="organization_id"
         case placeName = "place_name"
         case startsAt = "starts_at"
     }
@@ -113,11 +120,14 @@ enum JiifooAPI {
         latitude: Double,
         longitude: Double,
         startsAt: Date,
-        capacity: Int?
+        capacity: Int?,
+        organizationId:UUID?
+        
     ) async throws -> UUID {
         let userId = try await supabase.auth.session.user.id
         let event = NewEvent(
             creatorId: userId,
+            organizationId: organizationId,
             title: title,
             category: category,
             description: description,
@@ -138,7 +148,7 @@ enum JiifooAPI {
     }
 
     // 近くの募集中イベントを探す
-    static func nearbyEvents(latitude: Double, longitude: Double, radiusM: Double = 3000) async throws -> [EventPin] {
+    static func nearbyEvents(latitude: Double, longitude: Double, radiusM: Double = 800) async throws -> [EventPin] {
         try await supabase
             .rpc("nearby_events", params: [
                 "lat": latitude,
@@ -183,4 +193,12 @@ enum JiifooAPI {
             .execute()
             .value
     }
+    
+    // 法人として投稿できる法人の一覧(所属していなければ空)
+        static func myPostableOrganizations() async throws -> [Organization] {
+            try await supabase
+                .rpc("my_postable_organizations")
+                .execute()
+                .value
+        }
 }
