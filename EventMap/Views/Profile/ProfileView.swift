@@ -5,7 +5,6 @@ import SwiftUI
 // ③ インスタ風マイページ
 struct ProfileView: View {
     @Environment(EventStore.self) private var eventStore
-    @AppStorage("showJoinableRange") private var showJoinableRange = true
 
     // 仮のユーザー情報（ログイン機能ができたら差し替え）
     private let myName = "ユーザー名"

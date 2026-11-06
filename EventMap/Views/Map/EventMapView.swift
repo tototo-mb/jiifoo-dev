@@ -5,6 +5,8 @@ import MapKit
 struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventStore.self) private var eventStore
+    // 設定画面の「参加できる範囲を表示」と同じ名前で読む
+    @AppStorage("showJoinableRange") private var showJoinableRange = true
 
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var selectedEventID: Event.ID?
@@ -16,14 +18,15 @@ struct EventMapView: View {
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var mapProxy: MapProxy?              // 画面の位置 ⇔ 地図の座標の変換用
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
-    
+    @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
+    @State private var openedGathering:GatheringEvent?   //開いている集合画面
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             MapReader { proxy in
                 Map(position: $cameraPosition, selection: $selectedEventID) {
                     UserAnnotation()
-                    if let userLocation = locationManager.userLocation {
+                    if showJoinableRange, let userLocation = locationManager.userLocation {
                         MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
                             .foregroundStyle(.blue.opacity(0.08))
                             .stroke(.blue.opacity(0.5), lineWidth: 1.5)
@@ -51,7 +54,6 @@ struct EventMapView: View {
                                     ])))
                 .onMapCameraChange(frequency: .onEnd) { context in
                     lastCamera = context.camera
-                    Task { await eventStore.load(near: context.region.center) }
                 }
                 .ignoresSafeArea()
                 .onAppear { mapProxy = proxy }
@@ -64,7 +66,7 @@ struct EventMapView: View {
                     .padding(10)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 8)
+                    .padding(.top, gatheringEvent == nil ? 8 : 80)
             }
             VStack(spacing: 12) {
                 // 再読み込みボタン
@@ -148,6 +150,51 @@ struct EventMapView: View {
             CreateEventView()
                 .environment(eventStore)
                 .environment(locationManager)
+        }
+        // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
+        .task {
+            while !Task.isCancelled {
+                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+        // 集合中のイベントがあれば、画面の上にバナーを出す
+        .safeAreaInset(edge: .top) {
+            if let gatheringEvent {
+                gatheringBanner(for: gatheringEvent)
+            }
+        }
+        // 集合画面(全画面)
+        .fullScreenCover(item: $openedGathering) { event in
+            GatheringView(event: event)
+                .environment(locationManager)
+        }
+    }
+
+    // 集合モードのバナー(body が長くなりすぎないよう分けている)
+    private func gatheringBanner(for event: GatheringEvent) -> some View {
+        Button {
+            openedGathering = event
+        } label: {
+            HStack {
+                Image(systemName: "flame.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("集合モード")
+                        .font(.caption.bold())
+                    Text(event.title)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("開く")
+                    .font(.subheadline.bold())
+                Image(systemName: "chevron.right")
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.orange, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal)
         }
     }
 
@@ -306,4 +353,3 @@ struct EventMapView: View {
         .environment(LocationManager())
         .environment(EventStore(events: sampleEvents))
 }
-
