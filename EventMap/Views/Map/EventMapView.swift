@@ -6,7 +6,12 @@ struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventStore.self) private var eventStore
 
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    // 追従は MapKit 標準の .userLocation を使わず、自分でカメラを動かして行う
+    // （.userLocation に切り替えると MapKit が勝手に縮尺を変えるため）
+    @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var isFollowing = true                // 現在地を追従中か
+    @State private var followDistance: Double = EventMapView.homeDistance // 追従中の高さ(m)
+    @State private var hasCenteredOnce = false           // 起動後、最初に現在地へ合わせたか
     @State private var selectedEventID: Event.ID?
     @State private var showCreateEvent=false
     @State private var lastCamera: MapCamera?
@@ -88,7 +93,7 @@ struct EventMapView: View {
                 Button {
                     backTo2D()
                 } label: {
-                    Image(systemName: (cameraPosition.followsUserLocation || isReturningHome) ? "location.fill" : "location")
+                    Image(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location")
                         .font(.title2)
                         .foregroundStyle(.blue)
                         .frame(width: 50, height: 50)
@@ -105,6 +110,22 @@ struct EventMapView: View {
                 await eventStore.load(near: userLocation)
             }
         }
+        // 起動時、すでに現在地がわかっていればそこへ合わせる
+        .onAppear { followUser() }
+        // 現在地が動いたら、追従中ならカメラもついていく
+        .onChange(of: followKey) { _, _ in
+            followUser()
+        }
+        // ユーザーが地図を指で動かしたら追従をやめる
+        .onChange(of: cameraPosition) { _, newValue in
+            if newValue.positionedByUser {
+                isFollowing = false
+                if isReturningHome {          // 戻る途中で触られたら戻るのも中止
+                    cameraTask?.cancel()
+                    isReturningHome = false
+                }
+            }
+        }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
             get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
@@ -113,9 +134,10 @@ struct EventMapView: View {
             Button("OK", role: .cancel) { }
         }
         .onChange(of: locationManager.authorizationStatus) { _, status in
-            // 許可されたら改めて現在地へカメラを合わせる
+            // 許可されたら改めて現在地の追従を始める（位置が届いた時点でカメラが動く）
             if status == .authorizedWhenInUse || status == .authorizedAlways {
-                cameraPosition = .userLocation(fallback: .automatic)
+                isFollowing = true
+                followUser()
             }
         }
         // 詳細シートを閉じたら、ピンを押す前の場所に戻る
@@ -148,6 +170,12 @@ struct EventMapView: View {
         return String(format: "%.3f,%.3f", l.latitude, l.longitude)
     }
 
+    // 追従用の目印（およそ1m単位）。これが変わったらカメラを動かす
+    private var followKey: String {
+        guard let l = locationManager.userLocation else { return "none" }
+        return String(format: "%.5f,%.5f", l.latitude, l.longitude)
+    }
+
     // ピン1つ分の見た目（body の外、EventMapView の中に置く）
     //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
     @ViewBuilder
@@ -165,10 +193,31 @@ struct EventMapView: View {
             // ピンを押す前のカメラを記録（2回目以降のタップでは上書きしない）
             if savedCamera == nil {
                 savedCamera = lastCamera
-                wasFollowing = cameraPosition.followsUserLocation
+                wasFollowing = isFollowing
             }
+            isFollowing = false   // ピンを見ている間は現在地に引き戻さない
             selectedEventID=event.id
             flyToEvent(event)
+        }
+    }
+
+    // MARK: - 現在地の追従
+
+    // 追従中なら、今の高さ(followDistance)のまま現在地を真上から映す
+    private func followUser() {
+        guard isFollowing, !isReturningHome,
+              let userLocation = locationManager.userLocation else { return }
+        let camera = MapCamera(centerCoordinate: userLocation,
+                               distance: followDistance,
+                               heading: 0,
+                               pitch: 0)
+        if hasCenteredOnce {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                cameraPosition = .camera(camera)
+            }
+        } else {
+            cameraPosition = .camera(camera)   // 起動直後はアニメーションなしで合わせる
+            hasCenteredOnce = true
         }
     }
 
@@ -179,11 +228,12 @@ struct EventMapView: View {
     private let orbitStep: Double = 15        // 1回で回る角度(度)
     private let orbitSeconds: Double = 3.3    // 1回にかける秒数（大きいほどゆっくり）
     private let pinScreenRatio: CGFloat = 0.25 // ピンを置きたい位置（上から1/4）
-    private let homeDistance: Double = 2000   // 現在地ボタンで戻るときの高さ(m)。小さいほど拡大
+    private static let homeDistance: Double = 5000   // 現在地ボタンで戻るときの高さ(m)。小さいほど拡大
 
     // ピンを選んだとき：斜めから寄る → ゆっくり回り続ける
     private func flyToEvent(_ event: Event) {
         cameraTask?.cancel()   // 前の動きを止める
+        isReturningHome = false
         let startHeading = lastCamera?.heading ?? 0
 
         cameraTask = Task { @MainActor in
@@ -260,11 +310,13 @@ struct EventMapView: View {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
 
-            // 追従中だった場合は追従モードに戻す（傾きは元の2Dのまま）
-            if follow {
-                cameraPosition = .userLocation(fallback: .automatic)
-            }
             isReturningHome = false
+            // 追従中だった場合は、戻った高さのまま追従を再開する（縮尺は変えない）
+            if follow {
+                followDistance = saved.distance
+                isFollowing = true
+                followUser()
+            }
         }
     }
 
@@ -274,22 +326,23 @@ struct EventMapView: View {
         savedCamera = nil      // 詳細を閉じたときの「元に戻る」は使わない
         selectedEventID = nil
         isReturningHome = true // 押した瞬間にアイコンを青く
+        followDistance = Self.homeDistance   // 毎回同じ縮尺で追従する
 
         cameraTask = Task { @MainActor in
             if let userLocation = locationManager.userLocation {
                 withAnimation(.easeInOut(duration: 1.0)) {
                     cameraPosition = .camera(MapCamera(centerCoordinate: userLocation,
-                                                       distance: homeDistance,   // 毎回同じ縮尺で戻る
+                                                       distance: Self.homeDistance,
                                                        heading: 0,
                                                        pitch: 0))
                 }
                 try? await Task.sleep(for: .seconds(1.0))
                 guard !Task.isCancelled else { return }
             }
-            withAnimation(.easeInOut(duration: 0.8)) {
-                cameraPosition = .userLocation(fallback: .automatic)
-            }
+            // ここで .userLocation に切り替えない（切り替えると縮尺が勝手に戻ってしまう）
             isReturningHome = false
+            isFollowing = true
+            hasCenteredOnce = true
         }
     }
 }
