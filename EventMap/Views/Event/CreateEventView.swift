@@ -4,7 +4,6 @@ import MapKit
 struct CreateEventView: View {
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
-    @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
     @State private var category = ""
@@ -85,8 +84,10 @@ struct CreateEventView: View {
             .navigationTitle("イベントを作成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // タブの中なので「キャンセル」(dismiss) ではなく入力をクリアする
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("クリア") { resetForm() }
+                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("作成") { save() }
@@ -115,11 +116,25 @@ struct CreateEventView: View {
                 placeName: placeName,
                 coordinate: coordinate,
                 startsAt: startsAt,
-                capacity: hasCapacityLimit ? capacity : nil
+                capacity: hasCapacityLimit ? capacity : nil,
+                organizationId: nil   // TODO: 法人IDを渡す場合は AuthManager から取得する
             )
             isSaving = false
-            if success { dismiss() }
+            if success { resetForm() }   // タブの中なので閉じずに入力を空に戻す
         }
+    }
+
+    // 入力内容を初期状態に戻す
+    private func resetForm() {
+        title = ""
+        description = ""
+        placeName = ""
+        startsAt = Date().addingTimeInterval(30 * 60)
+        capacity = 3
+        hasCapacityLimit = true
+        pickedCoordinate = nil
+        searchResults = []
+        pickID = nil
     }
 
     // 集合場所の名前で検索
@@ -147,3 +162,4 @@ struct CreateEventView: View {
         .environment(EventStore())
         .environment(LocationManager())
 }
+
