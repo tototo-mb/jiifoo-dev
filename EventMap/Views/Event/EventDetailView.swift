@@ -11,6 +11,8 @@ struct EventDetailView: View {
     private var isMine: Bool { eventStore.isMine(event) }
     private var distance: Double? { locationManager.distance(to: event.coordinate) }
     private var isJoinable: Bool { locationManager.isJoinable(event.coordinate) }
+    // 同じ時間帯に参加予定のイベント(あれば参加できない)
+    private var conflictingEvent: Event? { eventStore.conflictingEvent(for: event) }
 
     var body: some View {
         NavigationStack {
@@ -44,6 +46,12 @@ struct EventDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    // 同じ時間帯のイベントに参加予定のときの説明
+                    if !isJoined && !isMine, let conflictingEvent {
+                        Text("同じ時間帯の「\(conflictingEvent.title)」に参加予定のため参加できません")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Button {
                         if isJoined {
@@ -60,7 +68,7 @@ struct EventDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(isJoined ? .green : .blue)
                     // 参加済みならキャンセルはいつでもできる。未参加なら範囲内のときだけ押せる
-                    .disabled(isMine || (!isJoined && (!isJoinable || event.isFull)))
+                    .disabled(isMine || (!isJoined && (!isJoinable || event.isFull || conflictingEvent != nil)))
                 }
                 .padding()
                 .background(.bar)
@@ -89,6 +97,7 @@ struct EventDetailView: View {
         if isMine { return "あなたが主催中" }
         if isJoined { return "参加予定" }
         if event.isFull { return "満員です" }
+        if conflictingEvent != nil { return "同じ時間帯に参加予定があります" }
         return isJoinable ? "参加する" : "範囲外のため参加できません"
     }
 
@@ -96,6 +105,7 @@ struct EventDetailView: View {
         if isMine { return "flame.fill" }
         if isJoined { return "checkmark.circle.fill" }
         if event.isFull { return "person.3.fill" }
+        if conflictingEvent != nil { return "clock.badge.xmark" }
         return isJoinable ? "person.badge.plus" : "location.slash"
     }
 

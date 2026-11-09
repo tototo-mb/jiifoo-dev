@@ -51,8 +51,8 @@ final class EventStore {
         }
     }
 
-    // 予約・キャンセル後に、今の場所でもう一度読み込む
-    private func reload() async {
+    // 予約・キャンセル後や集合モード終了時に、今の場所でもう一度読み込む
+    func reload() async {
         guard let center = lastLoadedCenter?.coordinate else { return }
         await load(near: center, force: true)
     }
@@ -68,6 +68,16 @@ final class EventStore {
         return creator == myUserID
     }
 
+    // 同じ時間帯(開始時刻の差が1時間未満)に、すでに主催・参加しているイベント
+    // ※最終的な判定は Supabase の reserve_event が行う(ここは見た目のため)
+    func conflictingEvent(for event: Event) -> Event? {
+        events.first { other in
+            other.id != event.id
+                && joinedEventIDs.contains(other.id)
+                && abs(other.startsAt.timeIntervalSince(event.startsAt)) < 60 * 60
+        }
+    }
+
     // 参加する(画面からはこれを呼ぶだけでよい)
     func join(_ event: Event) {
         Task {
@@ -76,12 +86,16 @@ final class EventStore {
                 switch result {
                 case "ok":
                     joinedEventIDs.insert(event.id)
+                    await NotificationManager.scheduleGathering(for: event)
                 case "already_reserved":
                     joinedEventIDs.insert(event.id)
+                    await NotificationManager.scheduleGathering(for: event)
                 case "full":
                     message = "満員のため参加できませんでした"
                 case "closed":
                     message = "募集が終了しました"
+                case "time_conflict":
+                    message = "同じ時間帯に参加予定のイベントがあるため参加できません"
                 case "not_logged_in":
                     message = "ログインしてください"
                 default:
@@ -103,6 +117,7 @@ final class EventStore {
                 switch result {
                 case "ok", "not_reserved":
                     joinedEventIDs.remove(event.id)
+                    NotificationManager.cancelGathering(eventID: event.id)
                 case "too_late":
                     message = "集合モードに入ったためキャンセルできません"
                 case "creator_cannot_cancel":
@@ -131,7 +146,7 @@ final class EventStore {
     ) async -> Bool {
         do {
             //Supabaseにイベントを送る
-            _ = try await JiifooAPI.createEvent(
+            let newID = try await JiifooAPI.createEvent(
                 title: title,
                 category: category,
                 description: description,
@@ -142,6 +157,12 @@ final class EventStore {
                 capacity: capacity,
                 organizationId: organizationId
             )
+            //主催者にも集合モードの通知を予約
+            await NotificationManager.scheduleGathering(id: newID,
+            title: title,
+            placeName: placeName,
+             startsAt: startsAt
+             )
             // ② 地図を読み込み直す
             await reload()
             // ③ 成功を返す

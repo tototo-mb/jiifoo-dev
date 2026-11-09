@@ -4,6 +4,10 @@ import MapKit
 struct CreateEventView: View {
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
+    @Environment(AuthManager.self) private var authManager
+
+    // 作成に成功したときに呼ばれる(呼び出し側でマップへ戻す)
+    var onCreated: (() -> Void)? = nil
 
     @State private var title = ""
     @State private var category = ""
@@ -20,6 +24,14 @@ struct CreateEventView: View {
     @State private var searchResults: [MKMapItem] = []
     @State private var pickID: UUID?          // 選ぶたびに変わる → 3Dアニメーション開始
 
+    enum PlaceInputMode: String, CaseIterable {
+        case map = "マップから選択"
+        case search = "検索して選択"
+    }
+    @State private var inputMode: PlaceInputMode = .map
+    @State private var searchText = ""          // 検索用
+    @State private var showPlacePicker = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -29,25 +41,11 @@ struct CreateEventView: View {
                 }
 
                 Section("集合") {
+                    // 表示用の名前だけ入力する（検索は下の欄で行う）
                     TextField("集合場所（例：渋谷駅　ハチ公前）", text: $placeName)
-                        .onSubmit { searchPlace() }   // 改行キーで検索
-
-                    // 検索結果
-                    ForEach(searchResults, id: \.self) { item in
-                        Button {
-                            select(item)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(item.name ?? "")
-                                Text(item.address?.shortAddress ?? "")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
 
                     DatePicker("開始時刻", selection: $startsAt,
-                               in: Date().addingTimeInterval(6 * 60)...Date().addingTimeInterval(59 * 60),
+                               in: startsAtRange,
                                displayedComponents: [.date, .hourAndMinute])
                     Toggle("募集人数に上限を設ける", isOn: $hasCapacityLimit)
                     if hasCapacityLimit {
@@ -59,32 +57,55 @@ struct CreateEventView: View {
                     }
                 }
 
-                Section("集合場所を地図で選ぶ（タップで指定）") {
-                    MapReader { proxy in
-                        Map(position: $cameraPosition) {
-                            UserAnnotation()
-                            if let pickedCoordinate {
-                                Marker(placeName.isEmpty ? "集合場所" : placeName,
-                                       coordinate: pickedCoordinate)
-                            }
-                        }
-                        .mapStyle(.standard(elevation: .realistic))          // 3D表示
-                        .orbitCamera(on: pickID, coordinate: pickedCoordinate) // Componentsのファイル
-                        .onTapGesture { point in
-                            if let coord = proxy.convert(point, from: .local) {
-                                pickedCoordinate = coord
-                                pickID = UUID()
+                Section("集合場所の指定方法") {
+                    Picker("指定方法", selection: $inputMode) {
+                        ForEach(PlaceInputMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+
+                    switch inputMode {
+                    case .map:
+                        Button("マップを開いてピンを立てる") { showPlacePicker = true }
+                    case .search:
+                        TextField("地名・住所を入力", text: $searchText)
+                            .onSubmit { searchPlace() }   // 改行キーで検索
+                        ForEach(searchResults, id: \.self) { item in
+                            Button {
+                                select(item)
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(item.name ?? "")
+                                    Text(item.address?.shortAddress ?? "")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
-                    .frame(height: 260)
-                    .listRowInsets(EdgeInsets())
+
+                    // どちらの方法でも、選んだ場所を確認用の地図で表示する
+                    if let pickedCoordinate {
+                        Map(position: $cameraPosition) {
+                            Marker(placeName.isEmpty ? "集合場所" : placeName, coordinate: pickedCoordinate)
+                        }
+                        .mapStyle(.standard(elevation: .realistic))
+                        .orbitCamera(on: pickID, coordinate: pickedCoordinate)
+                        .frame(height: 220)
+                        .listRowInsets(EdgeInsets())
+                    }
                 }
+            }   // ← Form の終わり
+            // ↓ ここが「3」の追加場所
+            .sheet(isPresented: $showPlacePicker) {
+                // 法人はどこでも、個人は現在地から 800m 以内だけ選べる
+                PlacePickerMapView(coordinate: $pickedCoordinate,
+                                   limitToNearby: !authManager.isCorporate)
             }
+            .onChange(of: pickedCoordinate?.latitude) { pickID = UUID() }  // ピンが変わったら3D演出
+            // ↑ ここまで
             .navigationTitle("イベントを作成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // タブの中なので「キャンセル」(dismiss) ではなく入力をクリアする
                 ToolbarItem(placement: .cancellationAction) {
                     Button("クリア") { resetForm() }
                         .disabled(isSaving)
@@ -100,7 +121,19 @@ struct CreateEventView: View {
             )) {
                 Button("OK", role: .cancel) {}
             }
-        }
+        }   // ← NavigationStack の終わり
+    }       // ← body の終わり
+
+
+    // 選べる開始時刻の範囲(Supabase 側のルールより少し内側にしておく)
+    //   個人:6分後〜59分後
+    //   法人:6分後〜30日後(1時間の余裕をもたせる)
+    private var startsAtRange: ClosedRange<Date> {
+        let from = Date().addingTimeInterval(6 * 60)
+        let to = authManager.isCorporate
+            ? Date().addingTimeInterval(30 * 24 * 60 * 60 - 60 * 60)
+            : Date().addingTimeInterval(59 * 60)
+        return from...to
     }
 
     private func save() {
@@ -117,10 +150,16 @@ struct CreateEventView: View {
                 coordinate: coordinate,
                 startsAt: startsAt,
                 capacity: hasCapacityLimit ? capacity : nil,
-                organizationId: nil   // TODO: 法人IDを渡す場合は AuthManager から取得する
+                // 法人なら法人IDを送る → Supabase 側で法人イベント(corporate)として扱われる
+                // TODO: 複数の法人に所属している場合は、どの法人として作るか選べるようにする
+                organizationId: authManager.organizations.first?.id
             )
             isSaving = false
-            if success { resetForm() }   // タブの中なので閉じずに入力を空に戻す
+            // 成功したら入力を空に戻して、マップへ戻る(失敗時はアラートが出て画面はそのまま)
+            if success {
+                resetForm()
+                onCreated?()
+            }
         }
     }
 
@@ -135,13 +174,15 @@ struct CreateEventView: View {
         pickedCoordinate = nil
         searchResults = []
         pickID = nil
+        searchText = ""
+        inputMode = .map
     }
 
     // 集合場所の名前で検索
     private func searchPlace() {
-        guard !placeName.isEmpty else { return }
+        guard !searchText.isEmpty else { return }
         let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = placeName
+        request.naturalLanguageQuery = searchText
         Task {
             let response = try? await MKLocalSearch(request: request).start()
             searchResults = response?.mapItems ?? []
@@ -150,16 +191,24 @@ struct CreateEventView: View {
 
     // 検索結果を選んだとき
     private func select(_ item: MKMapItem) {
-        placeName = item.name ?? placeName
+        // 個人は現在地から 800m より遠い場所を選べない
+        if !authManager.isCorporate,
+           let distance = locationManager.distance(to: item.location.coordinate),
+           distance > LocationManager.joinableRadius {
+            eventStore.message = "現在地から\(Int(LocationManager.joinableRadius))m以内の場所を選んでください"
+            return
+        }
+        if placeName.isEmpty { placeName = item.name ?? "" }  // 自分で入力した名前を上書きしない
         pickedCoordinate = item.location.coordinate
         searchResults = []
-        pickID = UUID()
     }
+
 }
 
 #Preview {
     CreateEventView()
         .environment(EventStore())
         .environment(LocationManager())
+        .environment(AuthManager())
 }
 

@@ -42,8 +42,9 @@ struct GatheringView: View {
                     MapCircle(center: event.coordinate, radius: Self.checkInRadius)
                         .foregroundStyle(.orange.opacity(0.15))
                         .stroke(.orange, lineWidth: 1)
-                    Annotation(event.placeName, coordinate: event.coordinate) {
-                        //GatherBeaconView()
+                    // 集合場所の目印(柱の根元が集合場所に来るよう anchor を下にする)
+                    Annotation(event.placeName, coordinate: event.coordinate, anchor: .bottom) {
+                        GatherBeaconView()
                     }
                 }
                 .frame(height: 300)
