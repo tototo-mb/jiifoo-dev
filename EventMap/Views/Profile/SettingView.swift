@@ -10,6 +10,10 @@ struct SettingsView: View {
     // EventMapView でも同じ名前で読んでいるので、ここで変えるとすぐ反映される
     @AppStorage("showJoinableRange") private var showJoinableRange = true
 
+    // 画面の明るさ(0: 端末の設定に合わせる, 1: ライト, 2: ダーク)
+    // EventMapApp でも同じ名前で読んで、アプリ全体に反映している
+    @AppStorage("appearance") private var appearance = 0
+
     @State private var email: String?
     @State private var showLogoutDialog = false
 
@@ -35,6 +39,17 @@ struct SettingsView: View {
                     Text("マップの表示")
                 } footer: {
                     Text("マップに、現在地から\(Int(LocationManager.joinableRadius))m(参加できる範囲)の円を表示します。")
+                }
+
+                // ---- アプリの表示 ----
+                Section("アプリの表示") {
+                    Picker(selection: $appearance) {
+                        Text("端末の設定").tag(0)
+                        Text("ライト").tag(1)
+                        Text("ダーク").tag(2)
+                    } label: {
+                        Label("テーマ", systemImage: "circle.lefthalf.filled")
+                    }
                 }
 
                 // ---- アプリについて ----

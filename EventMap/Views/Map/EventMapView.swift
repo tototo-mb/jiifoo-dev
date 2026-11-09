@@ -21,7 +21,7 @@ struct EventMapView: View {
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var mapProxy: MapProxy?              // 画面の位置 ⇔ 地図の座標の変換用
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
-    // マイページの設定「参加できる範囲を表示」(初期値は表示する)
+    @State private var isGatheringMode = true    // マイページの設定「参加できる範囲を表示」(初期値は表示する)
     @AppStorage("showJoinableRange") private var showJoinableRange = true
 
 
@@ -52,7 +52,7 @@ struct EventMapView: View {
                 .ignoresSafeArea()
                 .onAppear { mapProxy = proxy }
             }
-            //ScreenEdgeGlowView()
+            //ScreenEdgeView()
 
             // 読み込み中の表示(上部中央)
             if eventStore.isLoading {
@@ -104,6 +104,8 @@ struct EventMapView: View {
             .padding(.trailing, 16)
             .padding(.bottom, 24)
         }
+        //スクリーン虹色
+        .screenEdgeGlow(isGatheringMode)
         // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
         .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
