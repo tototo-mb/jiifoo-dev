@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Supabase
 
 // 集合モードの画面
 // ・集合場所の地図(光の柱)と、自分の現在地
@@ -17,6 +18,7 @@ struct GatheringView: View {
     @State private var isCheckingIn = false
     @State private var message: String?
     @State private var camera: MapCameraPosition
+    @State private var isEnded = false //集合モードが終わったか
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -32,6 +34,10 @@ struct GatheringView: View {
     private var isNear: Bool { (distance ?? .infinity) <= Self.checkInRadius }
     private var isCheckedIn: Bool { myStatus == "checked_in" }
     private var arrivedCount: Int { members.filter(\.checkedIn).count }
+    //集合モードが終わる時刻（データベースのevent_pahseと同じ開始から１時間後に設定）
+    /*private var endsAt: Date { Date().addingTimeInterval(120)}*/  //テスト用                     
+    private var endsAt: Date { event.startsAt.addingTimeInterval(60 * 60) } // 本番用
+
 
     var body: some View {
         NavigationStack {
@@ -104,8 +110,24 @@ struct GatheringView: View {
             .task {
                 while !Task.isCancelled {
                     await loadMembers()
-                    try? await Task.sleep(for: .seconds(15))
+                    try? await Task.sleep(for: .seconds(60))
                 }
+            }
+            //メンバーの参加状況が変わったら、すぐ読み直す
+            .task{
+                let channel = supabase.channel("gathering-\(event.id)")
+                let changes = channel.postgresChange(
+                    AnyAction.self,
+                    schema: "public",
+                    table: "participations",
+                    filter: .eq("event_id",value: event.id)
+                )
+                try? await channel.subscribeWithError()
+                for await _ in changes{
+                    await loadMembers()
+            }
+            //画面を閉じたら止める
+            await supabase.removeChannel(channel)
             }
             .sensoryFeedback(.success, trigger: isCheckedIn)
             .alert(message ?? "", isPresented: Binding(
@@ -113,6 +135,19 @@ struct GatheringView: View {
                 set: { if !$0 { message = nil } }
             )) {
                 Button("OK", role: .cancel) { }
+            }
+            //集合モードが終わる時刻まで待機する
+            .task{
+                let seconds = endsAt.timeIntervalSinceNow
+                if seconds > 0{
+                    try? await Task.sleep(for: .seconds(seconds))
+                }
+                guard !Task.isCancelled else { return }
+                isEnded = true
+            }
+            //集合モードが終わったら通知してOKボタンを押したら画面を閉じる
+            .alert("集合モードが終了しました",isPresented: $isEnded){
+                Button("OK"){ dismiss()}
             }
         }
     }

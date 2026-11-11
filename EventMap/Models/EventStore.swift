@@ -45,6 +45,7 @@ final class EventStore {
             let serverEvents=try await pins.map(Event.init(pin: ))
             events=serverEvents + (Self.showSampleEvents ? sampleEvents :[])
             joinedEventIDs = try await joined
+            await NotificationManager.syncGathering(with: joinedEvents)
         } catch {
             message = "イベントを読み込めませんでした"
             print("イベントの読み込みに失敗:", error)
@@ -181,6 +182,8 @@ final class EventStore {
         myUserID = nil
         message = nil
         lastLoadedCenter = nil
+        //ログアウトしたとき、予約していた通知を全部消す
+        NotificationManager.cancelAll()
     }
     
 

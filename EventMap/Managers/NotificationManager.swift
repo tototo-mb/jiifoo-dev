@@ -1,6 +1,8 @@
 
 import UserNotifications
 
+
+
 enum NotificationManager {
 
 
@@ -38,8 +40,22 @@ static func scheduleGathering(id: UUID,
                                 startsAt:event.startsAt)
     }
 
+        //参加登録したイベントが中止になった場合
+    //予約を全部削除して渡されたイベントを予約し直す
+    static func syncGathering(with events: [Event]) async{
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        for event in events{
+            await scheduleGathering(for: event)
+        }
+    }
 
-//予約した通知を取り消す
+    //ログアウトした時用
+    //予約を全部消す
+    static func cancelAll(){
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
+    //予約した通知を取り消す
     static func cancelGathering(eventID:UUID){
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [eventID.uuidString]) 
@@ -50,4 +66,22 @@ static func scheduleGathering(id: UUID,
         let center = UNUserNotificationCenter.current()
         _ = try? await center.requestAuthorization(options: [.alert,.sound,.badge])
     }
+}
+
+@Observable
+final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate{
+    static let shared = NotificationDelegate()
+
+    var tappedEventID: UUID?
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async ->UNNotificationPresentationOptions{
+                                    [.banner, .sound, .list]
+                                }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async{
+                                    let identifier = response.notification.request.identifier
+                                    tappedEventID = UUID(uuidString: identifier)
+                                }
 }

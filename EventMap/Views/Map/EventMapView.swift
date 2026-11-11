@@ -177,7 +177,18 @@ struct EventMapView: View {
             GatheringView(event: event)
                 .environment(locationManager)
         }
+        //通知がタップされたら、集合画面を開く
+        .onChange(of: NotificationDelegate.shared.tappedEventID){_,eventID in
+            guard let eventID else {return}
+            Task{
+                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                if let gatheringEvent, gatheringEvent.id == eventID{
+                    openedGathering = gatheringEvent
+                }
+            NotificationDelegate.shared.tappedEventID = nil //開いたら連絡板を消す    
+        }
     }
+}
 
     // 集合モードのバナー(body が長くなりすぎないよう分けている)
     private func gatheringBanner(for event: GatheringEvent) -> some View {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 // アプリの起動ファイル
 // ※ 新規プロジェクトで自動作成された「〇〇App.swift」の中身を、このファイルの内容に置き換えてください。
@@ -7,6 +8,11 @@ struct EventMapApp: App {
     @State private var locationManager = LocationManager()
     @State private var eventStore = EventStore()
     @State private var authManager = AuthManager()
+
+    init(){
+        //通知をアプリ使用中でも表示するための設定
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+    }
     
 
     var body: some Scene {

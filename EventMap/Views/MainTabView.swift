@@ -43,6 +43,11 @@ struct MainTabView: View {
         .task{
             await NotificationManager.requestPermission()
         }
+        .onChange(of: NotificationDelegate.shared.tappedEventID){_, eventID in
+            if eventID != nil{
+                selectedTab = 0
+            }
+        }
     }
 }
 
