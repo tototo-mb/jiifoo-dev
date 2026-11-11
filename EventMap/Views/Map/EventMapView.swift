@@ -5,6 +5,7 @@ import MapKit
 struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventStore.self) private var eventStore
+    @Environment(GatheringMode.self) private var gathering   // 集合モード（GroupModeUI.swift）
 
     // 追従は MapKit 標準の .userLocation を使わず、自分でカメラを動かして行う
     // （.userLocation に切り替えると MapKit が勝手に縮尺を変えるため）
@@ -13,7 +14,7 @@ struct EventMapView: View {
     @State private var followDistance: Double = EventMapView.homeDistance // 追従中の高さ(m)
     @State private var hasCenteredOnce = false           // 起動後、最初に現在地へ合わせたか
     @State private var selectedEventID: Event.ID?
-    @State private var showCreateEvent=false
+    @State private var showCreateEvent = false
     @State private var lastCamera: MapCamera?
     @State private var cameraTask: Task<Void, Never>?   // 実行中のカメラの動き
     @State private var isReturningHome = false          // 現在地へ戻っている最中
@@ -21,91 +22,31 @@ struct EventMapView: View {
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var mapProxy: MapProxy?              // 画面の位置 ⇔ 地図の座標の変換用
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
-    @State private var isGatheringMode = true    // マイページの設定「参加できる範囲を表示」(初期値は表示する)
+    // マイページの設定「参加できる範囲を表示」(初期値は表示する)
     @AppStorage("showJoinableRange") private var showJoinableRange = true
 
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            MapReader { proxy in
-                Map(position: $cameraPosition, selection: $selectedEventID) {
-                    UserAnnotation()
-                    if showJoinableRange, let userLocation = locationManager.userLocation {
-                        MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
-                            .foregroundStyle(.blue.opacity(0.08))
-                            .stroke(.blue.opacity(0.5), lineWidth: 1.5)
-                    }
+            mapLayer
 
-                    ForEach(eventStore.events) { event in
-                        Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
-                            eventPin(for: event)
-                        }
-                    }
-                }
-                .mapControls { }
-                .mapStyle(.standard(elevation: .realistic,
-                                    emphasis: .muted,
-                                    pointsOfInterest: .excludingAll))
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
-                }
-                .ignoresSafeArea()
-                .onAppear { mapProxy = proxy }
-            }
-            //ScreenEdgeView()
-
-            // 読み込み中の表示(上部中央)
+            // 読み込み中の表示(上部中央)。集合モード中はカウントダウンの下にずらす
             if eventStore.isLoading {
                 ProgressView()
                     .padding(10)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 8)
+                    .padding(.top, gathering.isActive ? 80 : 8)
             }
-            VStack(spacing: 12) {
-                // 再読み込みボタン
-                Button {
-                    if let userLocation = locationManager.userLocation {
-                        Task { await eventStore.load(near: userLocation, force: true) }
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .frame(width: 50, height: 50)
-                        .background(.regularMaterial, in: Circle())
-                        .shadow(radius: 3)
-                }
-                //イベント作成ボタン
-                Button {
-                    showCreateEvent=true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .frame(width: 50, height: 50)
-                        .background(.regularMaterial, in: Circle())
-                        .shadow(radius: 3)
-                }
-                .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
 
-                // 現在地ボタン（右下）
-                Button {
-                    backTo2D()
-                } label: {
-                    Image(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .frame(width: 50, height: 50)
-                        .background(.regularMaterial, in: Circle())
-                        .shadow(radius: 3)
-                }
-            }
-            .padding(.trailing, 16)
-            .padding(.bottom, 24)
+            controlButtons
         }
-        //スクリーン虹色
-        .screenEdgeGlow(isGatheringMode)
+        // 集合モードの光とカウントダウン（GroupModeUI.swift）
+        .gatheringModeOverlay()
+        // ▼ テスト用：起動したら10分後集合で集合モードを始める（集合機能ができたら消す）
+        .onAppear {
+            if !gathering.isActive { gathering.start(title: "集合", minutes: 10) }
+        }
         // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
         .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
@@ -137,9 +78,12 @@ struct EventMapView: View {
         }
         .onChange(of: locationManager.authorizationStatus) { _, status in
             // 許可されたら改めて現在地の追従を始める（位置が届いた時点でカメラが動く）
-            if status == .authorizedWhenInUse || status == .authorizedAlways {
+            switch status {
+            case .authorizedWhenInUse, .authorizedAlways:
                 isFollowing = true
                 followUser()
+            default:
+                break
             }
         }
         // 詳細シートを閉じたら、ピンを押す前の場所に戻る
@@ -166,6 +110,74 @@ struct EventMapView: View {
         }
     }
 
+    // MARK: - 画面の部品
+
+    // 地図
+    private var mapLayer: some View {
+        MapReader { proxy in
+            Map(position: $cameraPosition, selection: $selectedEventID) {
+                UserAnnotation()
+                if showJoinableRange, let userLocation = locationManager.userLocation {
+                    MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
+                        .foregroundStyle(.blue.opacity(0.08))
+                        .stroke(.blue.opacity(0.5), lineWidth: 1.5)
+                }
+
+                ForEach(eventStore.events) { event in
+                    Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
+                        eventPin(for: event)
+                    }
+                }
+            }
+            .mapControls { }
+            .mapStyle(.standard(elevation: .realistic,
+                                emphasis: .muted,
+                                pointsOfInterest: .excludingAll))
+            .onMapCameraChange(frequency: .onEnd) { context in
+                lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
+            }
+            .ignoresSafeArea()
+            .onAppear { mapProxy = proxy }
+        }
+    }
+
+    // 右下のボタン（再読み込み・イベント作成・現在地）
+    private var controlButtons: some View {
+        VStack(spacing: 12) {
+            // 再読み込みボタン
+            circleButton(systemName: "arrow.clockwise") {
+                if let userLocation = locationManager.userLocation {
+                    Task { await eventStore.load(near: userLocation, force: true) }
+                }
+            }
+
+            // イベント作成ボタン
+            circleButton(systemName: "plus") {
+                showCreateEvent = true
+            }
+            .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
+
+            // 現在地ボタン
+            circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
+                backTo2D()
+            }
+        }
+        .padding(.trailing, 16)
+        .padding(.bottom, 24)
+    }
+
+    // 丸いボタン1つ分の見た目
+    private func circleButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 50, height: 50)
+                .background(.regularMaterial, in: Circle())
+                .shadow(radius: 3)
+        }
+    }
+
     // 現在地をおよそ100m単位に丸めた目印。これが変わったら読み込み直す
     private var locationKey: String {
         guard let l = locationManager.userLocation else { return "none" }
@@ -178,27 +190,27 @@ struct EventMapView: View {
         return String(format: "%.5f,%.5f", l.latitude, l.longitude)
     }
 
-    // ピン1つ分の見た目（body の外、EventMapView の中に置く）
-    //法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
+    // ピン1つ分の見た目
+    // 法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
     @ViewBuilder
     private func eventPin(for event: Event) -> some View {
         let joinable = locationManager.isJoinable(event.coordinate)
-        Group{
-            if event.scale == .businessMode{
+        Group {
+            if event.scale == .businessMode {
                 BusinessPinView(isJoinable: joinable)
-            }else{
+            } else {
                 PrivatePinView(isJoinable: joinable)
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture{
+        .onTapGesture {
             // ピンを押す前のカメラを記録（2回目以降のタップでは上書きしない）
             if savedCamera == nil {
                 savedCamera = lastCamera
                 wasFollowing = isFollowing
             }
             isFollowing = false   // ピンを見ている間は現在地に引き戻さない
-            selectedEventID=event.id
+            selectedEventID = event.id
             flyToEvent(event)
         }
     }
@@ -353,4 +365,5 @@ struct EventMapView: View {
     EventMapView()
         .environment(LocationManager())
         .environment(EventStore(events: sampleEvents))
+        .environment(GatheringMode())
 }
