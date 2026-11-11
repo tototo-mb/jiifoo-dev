@@ -1,143 +1,52 @@
 import SwiftUI
 import MapKit
 
-// ピンの位置の決め方
-enum PlaceMode: String, CaseIterable, Identifiable {
-    case search = "住所・地名で指定"
-    case map = "マップから選択"
-    var id: Self { self }
-}
-
 struct CreateEventView: View {
-    // true:法人用のタブとして表示(閉じる操作がなく、作成後は入力欄を空に戻す)
-    // false:マップの＋ボタンからシートとして表示
-    var isTab: Bool = false
-    //閉じるボタン
-    var onClose:(()-> Void)? = nil
-
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AuthManager.self) private var authManager
+
+    // 作成に成功したときに呼ばれる(呼び出し側でマップへ戻す)
+    var onCreated: (() -> Void)? = nil
 
     @State private var title = ""
+    @State private var category = ""
     @State private var description = ""
-    @State private var placeName = ""            // 集合場所の名前
+    @State private var placeName = ""
     @State private var startsAt = Date().addingTimeInterval(30 * 60)
     @State private var capacity = 3
     @State private var isSaving = false
     @State private var hasCapacityLimit = true
 
-    // ピンの位置
-    @State private var placeMode: PlaceMode = .search
-    @State private var searchQuery = ""          // 住所・地名の検索に使う文字
-    @State private var searchResults: [MKMapItem] = []
-    @State private var isSearching = false
+    // 地図用
+    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var pickedCoordinate: CLLocationCoordinate2D?
-    @State private var showMapPicker = false
+    @State private var searchResults: [MKMapItem] = []
+    @State private var pickID: UUID?          // 選ぶたびに変わる → 3Dアニメーション開始
 
-    // 誰として作るか(法人に所属している人だけ選べる)
-    @State private var organizations: [Organization] = []   // 投稿できる法人
-    @State private var postAs: Organization?                // nil なら個人として作る
-
-    @State private var showCreatedAlert = false            // タブ表示のとき「作成しました」を出す
-
-    private var isCorporate: Bool { postAs != nil }
+    enum PlaceInputMode: String, CaseIterable {
+        case map = "マップから選択"
+        case search = "検索して選択"
+    }
+    @State private var inputMode: PlaceInputMode = .map
+    @State private var searchText = ""          // 検索用
+    @State private var showPlacePicker = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("イベント") {
-                    // 法人に所属している人だけ「作成者」を選べる
-                    if !organizations.isEmpty {
-                        Picker("作成者", selection: $postAs) {
-                            Text("個人として").tag(Organization?.none)
-                            ForEach(organizations) { org in
-                                Text(org.name).tag(Organization?.some(org))
-                            }
-                        }
-                    }
                     TextField("イベント名", text: $title)
                     TextField("コメント", text: $description, axis: .vertical)
                 }
 
-                Section("集合場所") {
-                    TextField("集合場所の名前(例:松本駅 お城口 改札前)", text: $placeName)
-                }
+                Section("集合") {
+                    // 表示用の名前だけ入力する（検索は下の欄で行う）
+                    TextField("集合場所（例：渋谷駅　ハチ公前）", text: $placeName)
 
-                Section("ピンの位置") {
-                    Picker("指定方法", selection: $placeMode) {
-                        ForEach(PlaceMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    switch placeMode {
-                    case .search:
-                        // 住所・地名で検索
-                        HStack {
-                            TextField(isCorporate ? "住所や地名(例:長野県松本市丸の内4-1)" : "住所や地名(例:松本駅)",
-                                      text: $searchQuery)
-                                .onSubmit { searchPlace() }
-                            Button("検索") { searchPlace() }
-                                .disabled(searchQuery.isEmpty || isSearching)
-                        }
-
-                        // 検索結果の候補
-                        ForEach(searchResults, id: \.self) { item in
-                            Button {
-                                select(item)
-                            } label: {
-                                VStack(alignment: .leading) {
-                                    Text(item.name ?? "名前なし")
-                                    if let distance = locationManager.distance(to: item.location.coordinate) {
-                                        Text("現在地から \(formatDistance(distance))")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-
-                    case .map:
-                        // 全画面の地図を開いて選ぶ
-                        Button {
-                            showMapPicker = true
-                        } label: {
-                            Label("マップ上から選択", systemImage: "map")
-                        }
-                    }
-
-                    // 選んだ場所の確認
-                    if let pickedCoordinate {
-                        Map(position: .constant(.region(MKCoordinateRegion(
-                            center: pickedCoordinate, latitudinalMeters: 400, longitudinalMeters: 400))),
-                            interactionModes: []) {
-                            Marker("集合場所", coordinate: pickedCoordinate)
-                                .tint(.red)
-                        }
-                        .frame(height: 160)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        if let distance = locationManager.distance(to: pickedCoordinate) {
-                            Text("現在地から \(formatDistance(distance))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if isPlaceTooFar {
-                        Text("現在地から\(Int(LocationManager.joinableRadius))m以内の場所を選んでください")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                Section("日時と人数") {
                     DatePicker("開始時刻", selection: $startsAt,
-                               in: Date().addingTimeInterval(6 * 60)...latestStart,
+                               in: startsAtRange,
                                displayedComponents: [.date, .hourAndMinute])
-
                     Toggle("募集人数に上限を設ける", isOn: $hasCapacityLimit)
                     if hasCapacityLimit {
                         Picker("募集人数", selection: $capacity) {
@@ -147,64 +56,89 @@ struct CreateEventView: View {
                         }
                     }
                 }
+
+                Section("集合場所の指定方法") {
+                    Picker("指定方法", selection: $inputMode) {
+                        ForEach(PlaceInputMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+
+                    switch inputMode {
+                    case .map:
+                        Button("マップを開いてピンを立てる") { showPlacePicker = true }
+                    case .search:
+                        TextField("地名・住所を入力", text: $searchText)
+                            .onSubmit { searchPlace() }   // 改行キーで検索
+                        ForEach(searchResults, id: \.self) { item in
+                            Button {
+                                select(item)
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(item.name ?? "")
+                                    Text(item.address?.shortAddress ?? "")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    // どちらの方法でも、選んだ場所を確認用の地図で表示する
+                    if let pickedCoordinate {
+                        Map(position: $cameraPosition) {
+                            Marker(placeName.isEmpty ? "集合場所" : placeName, coordinate: pickedCoordinate)
+                        }
+                        .mapStyle(.standard(elevation: .realistic))
+                        .orbitCamera(on: pickID, coordinate: pickedCoordinate)
+                        .frame(height: 220)
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
+            }   // ← Form の終わり
+            // ↓ ここが「3」の追加場所
+            .sheet(isPresented: $showPlacePicker) {
+                // 法人はどこでも、個人は現在地から 800m 以内だけ選べる
+                PlacePickerMapView(coordinate: $pickedCoordinate,
+                                   limitToNearby: !authManager.isCorporate)
             }
+            .onChange(of: pickedCoordinate?.latitude) { pickID = UUID() }  // ピンが変わったら3D演出
+            // ↑ ここまで
             .navigationTitle("イベントを作成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // シートのときだけ「キャンセル」を出す(タブには閉じる先がない)
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(isTab ? "閉じる" : "キャンセル") {
-                        if isTab { resetForm() }
-                        if let onClose {
-                            onClose()      // タブ:マップのタブへ戻る
-                        } else {
-                            dismiss()      // シート:画面を閉じる
-                        }
-                    }
+                    Button("クリア") { resetForm() }
+                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("作成") { save() }
-                        .disabled(title.isEmpty || placeName.isEmpty || isSaving
-                                  || pickedCoordinate == nil || isPlaceTooFar)
+                        .disabled(title.isEmpty || placeName.isEmpty || isSaving)
                 }
-            }
-            // 開いたときに、投稿できる法人の一覧を読み込む
-            .task {
-                organizations = (try? await JiifooAPI.myPostableOrganizations()) ?? []
-                // 法人用のタブでは、最初から自分の法人を「作成者」に選んでおく
-                if isTab, postAs == nil {
-                    postAs = organizations.first
-                }
-            }
-            .alert("イベントを作成しました", isPresented: $showCreatedAlert) {
-                Button("OK", role: .cancel) { }
-            }
-            // 「マップ上から選択」で開く全画面の地図
-            .fullScreenCover(isPresented: $showMapPicker) {
-                PlacePickerMapView(coordinate: $pickedCoordinate, limitToNearby: !isCorporate)
-                    .environment(locationManager)
             }
             .alert(eventStore.message ?? "", isPresented: Binding(
                 get: { eventStore.message != nil },
                 set: { if !$0 { eventStore.message = nil } }
             )) {
-                Button("OK", role: .cancel) { }
+                Button("OK", role: .cancel) {}
             }
-        }
+        }   // ← NavigationStack の終わり
+    }       // ← body の終わり
+
+
+    // 選べる開始時刻の範囲(Supabase 側のルールより少し内側にしておく)
+    //   個人:6分後〜59分後
+    //   法人:6分後〜30日後(1時間の余裕をもたせる)
+    private var startsAtRange: ClosedRange<Date> {
+        let from = Date().addingTimeInterval(6 * 60)
+        let to = authManager.isCorporate
+            ? Date().addingTimeInterval(30 * 24 * 60 * 60 - 60 * 60)
+            : Date().addingTimeInterval(59 * 60)
+        return from...to
     }
 
-    // MARK: - 処理
-
     private func save() {
-        guard let coordinate = pickedCoordinate else { return }
-
-        // 開始時刻が範囲外なら理由を伝えて止める(画面を開いたまま時間が経った場合など)
-        guard startsAt >= Date().addingTimeInterval(5 * 60), startsAt <= latestStart else {
-            eventStore.message = isCorporate
-                ? "開始時刻は今から5分後〜30日後の間で選んでください"
-                : "開始時刻は今から5分後〜1時間後の間で選んでください"
-            return
-        }
+        // 地図で選んだ場所。選んでいなければ現在地
+        guard let coordinate = pickedCoordinate ?? locationManager.userLocation else { return }
 
         Task {
             isSaving = true
@@ -216,80 +150,65 @@ struct CreateEventView: View {
                 coordinate: coordinate,
                 startsAt: startsAt,
                 capacity: hasCapacityLimit ? capacity : nil,
-                organizationId: postAs?.id        // 法人として作るときだけ法人IDを送る
+                // 法人なら法人IDを送る → Supabase 側で法人イベント(corporate)として扱われる
+                // TODO: 複数の法人に所属している場合は、どの法人として作るか選べるようにする
+                organizationId: authManager.organizations.first?.id
             )
             isSaving = false
-            guard success else { return }
-            if isTab {
-                resetForm()               // タブでは画面を閉じずに入力欄を空に戻す
-                showCreatedAlert = true
-            } else {
-                dismiss()
+            // 成功したら入力を空に戻して、マップへ戻る(失敗時はアラートが出て画面はそのまま)
+            if success {
+                resetForm()
+                onCreated?()
             }
         }
     }
 
-    // 入力欄を最初の状態に戻す(作成者の選択はそのまま)
+    // 入力内容を初期状態に戻す
     private func resetForm() {
         title = ""
         description = ""
         placeName = ""
-        searchQuery = ""
-        searchResults = []
-        pickedCoordinate = nil
         startsAt = Date().addingTimeInterval(30 * 60)
         capacity = 3
         hasCapacityLimit = true
+        pickedCoordinate = nil
+        searchResults = []
+        pickID = nil
+        searchText = ""
+        inputMode = .map
     }
 
-    // 住所・地名で検索する
-    // 個人:現在地の近く(3km)を優先 / 法人:広い範囲(100km)を優先
+    // 集合場所の名前で検索
     private func searchPlace() {
-        guard !searchQuery.isEmpty else { return }
+        guard !searchText.isEmpty else { return }
         let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = searchQuery
-        if let user = locationManager.userLocation {
-            let meters: CLLocationDistance = isCorporate ? 100_000 : 3000
-            request.region = MKCoordinateRegion(center: user,
-                                                latitudinalMeters: meters,
-                                                longitudinalMeters: meters)
-        }
-        isSearching = true
+        request.naturalLanguageQuery = searchText
         Task {
             let response = try? await MKLocalSearch(request: request).start()
             searchResults = response?.mapItems ?? []
-            isSearching = false
-            if searchResults.isEmpty {
-                eventStore.message = "「\(searchQuery)」は見つかりませんでした"
-            }
         }
     }
 
-    // 検索結果の候補を選んだとき
+    // 検索結果を選んだとき
     private func select(_ item: MKMapItem) {
-        pickedCoordinate = item.location.coordinate
-        // 集合場所の名前が空なら、選んだ場所の名前を入れておく
-        if placeName.isEmpty, let name = item.name {
-            placeName = name
+        // 個人は現在地から 800m より遠い場所を選べない
+        if !authManager.isCorporate,
+           let distance = locationManager.distance(to: item.location.coordinate),
+           distance > LocationManager.joinableRadius {
+            eventStore.message = "現在地から\(Int(LocationManager.joinableRadius))m以内の場所を選んでください"
+            return
         }
+        if placeName.isEmpty { placeName = item.name ?? "" }  // 自分で入力した名前を上書きしない
+        pickedCoordinate = item.location.coordinate
         searchResults = []
     }
 
-    // 開始時刻の上限:個人は1時間後まで、法人は30日後まで
-    private var latestStart: Date {
-        Date().addingTimeInterval(isCorporate ? 30 * 24 * 60 * 60 : 59 * 60)
-    }
-
-    // 選んだ場所が現在地から遠すぎるか(法人は距離の制限なし)
-    private var isPlaceTooFar: Bool {
-        guard !isCorporate, let pickedCoordinate,
-              let distance = locationManager.distance(to: pickedCoordinate) else { return false }
-        return distance > LocationManager.joinableRadius
-    }
 }
 
 #Preview {
     CreateEventView()
         .environment(EventStore())
         .environment(LocationManager())
+        .environment(AuthManager())
 }
+

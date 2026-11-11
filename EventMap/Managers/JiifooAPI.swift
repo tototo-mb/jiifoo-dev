@@ -76,6 +76,55 @@ nonisolated struct NewEvent: Encodable, Sendable {
 nonisolated struct CreatedEvent: Decodable, Sendable {
     let id: UUID
 }
+//MARK: - 集合モード
+// ① データの形(Supabase から受け取る)
+ 
+// 自分が今「集合中」のイベント(my_gathering_event の結果)
+nonisolated struct GatheringEvent: Codable, Identifiable, Sendable {
+    let id: UUID
+    let title: String
+    let placeName: String
+    let latitude: Double
+    let longitude: Double
+    let startsAt: Date
+    let creatorId: UUID
+    let kind: String
+    let myStatus: String          // "reserved"(まだ) / "checked_in"(到着済み)
+ 
+    enum CodingKeys: String, CodingKey {
+        case id, title, latitude, longitude, kind
+        case placeName = "place_name"
+        case startsAt = "starts_at"
+        case creatorId = "creator_id"
+        case myStatus = "my_status"
+    }
+}
+ 
+// メンバー1人分(event_members の結果)
+nonisolated struct GatheringMember: Codable, Identifiable, Sendable {
+    let userId: UUID
+    let displayName: String
+    let isCreator: Bool
+    let checkedIn: Bool
+ 
+    var id: UUID { userId }
+ 
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case displayName = "display_name"
+        case isCreator = "is_creator"
+        case checkedIn = "checked_in"
+    }
+}
+ 
+// ② check_in に送る値
+nonisolated struct CheckInParams: Encodable, Sendable {
+    let p_event_id: UUID
+    let p_lat: Double
+    let p_lng: Double
+}
+ 
+
 // MARK: - 機能
 
 enum JiifooAPI {
@@ -193,12 +242,46 @@ enum JiifooAPI {
             .execute()
             .value
     }
+        // イベントを中止する(結果: ok / already_started / not_allowed など)
+    static func cancelEvent(eventId: UUID) async throws -> String {
+        try await supabase
+            .rpc("cancel_event", params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
     
     // 法人として投稿できる法人の一覧(所属していなければ空)
-        static func myPostableOrganizations() async throws -> [Organization] {
-            try await supabase
-                .rpc("my_postable_organizations")
-                .execute()
-                .value
-        }
+    static func myPostableOrganizations() async throws -> [Organization] {
+        try await supabase
+            .rpc("my_postable_organizations")
+            .execute()
+            .value
+    }
+
+        // ③ enum JiifooAPI { ... } の中に追加する関数
+ 
+    // 自分が今「集合中」のイベント(なければ nil)
+    static func myGatheringEvent() async throws -> GatheringEvent? {
+        let list: [GatheringEvent] = try await supabase
+            .rpc("my_gathering_event")
+            .execute()
+            .value
+        return list.first
+    }
+ 
+    // メンバーの名前と到着状況
+    static func eventMembers(eventId: UUID) async throws -> [GatheringMember] {
+        try await supabase
+            .rpc("event_members", params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
+ 
+    // 到着チェックイン("ok" / "too_far" / "not_gathering" などが返る)
+    static func checkIn(eventId: UUID, latitude: Double, longitude: Double) async throws -> String {
+        try await supabase
+            .rpc("check_in", params: CheckInParams(p_event_id: eventId, p_lat: latitude, p_lng: longitude))
+            .execute()
+            .value
+    }
 }
