@@ -8,12 +8,13 @@ struct EventMapApp: App {
     @State private var locationManager = LocationManager()
     @State private var eventStore = EventStore()
     @State private var authManager = AuthManager()
-
+    @State private var gathering = GatheringMode()
     init(){
         //通知をアプリ使用中でも表示するための設定
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
     }
     
+
 
     var body: some Scene {
         WindowGroup {
@@ -25,7 +26,8 @@ struct EventMapApp: App {
                         .environment(locationManager)
                         .environment(eventStore)
                         .environment(authManager)
-                }else{
+                        .environment(gathering)
+            }else{
                     LoginView()
                 }
             }

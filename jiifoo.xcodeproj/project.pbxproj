@@ -7,24 +7,87 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2A1DDEFC30A2C85000A0006E /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A1DDEFB30A2C85000A0006E /* WidgetKit.framework */; };
+		2A1DDEFE30A2C85000A0006E /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A1DDEFD30A2C85000A0006E /* SwiftUI.framework */; };
+		2A1DDF0D30A2C85300A0006E /* GatheringWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2A1DDEF930A2C85000A0006E /* GatheringWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2A6C81A13086F112006EA285 /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 2A6C81A03086F112006EA285 /* RiveRuntime */; };
 		2A72327430884BD200AD7F38 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 2A72327330884BD200AD7F38 /* Supabase */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2A1DDF0B30A2C85300A0006E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2ABEF81B30807AD300BEEB78 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A1DDEF830A2C85000A0006E;
+			remoteInfo = GatheringWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2A1DDF1230A2C85300A0006E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				2A1DDF0D30A2C85300A0006E /* GatheringWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		2A1DDEF930A2C85000A0006E /* GatheringWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GatheringWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A1DDEFB30A2C85000A0006E /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		2A1DDEFD30A2C85000A0006E /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		2ABEF82330807AD300BEEB78 /* jiifoo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = jiifoo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC2525A3085A330003212C6 /* jiifoo-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "jiifoo-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2A1DDF0E30A2C85300A0006E /* Exceptions for "GatheringWidget" folder in "GatheringWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 2A1DDEF830A2C85000A0006E /* GatheringWidgetExtension */;
+		};
+		2A1DDF1730A2DC9900A0006E /* Exceptions for "EventMap" folder in "GatheringWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Views/Components/GroupModeUI/GatheringAttributes.swift,
+			);
+			target = 2A1DDEF830A2C85000A0006E /* GatheringWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		2A1DDEFF30A2C85100A0006E /* GatheringWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2A1DDF0E30A2C85300A0006E /* Exceptions for "GatheringWidget" folder in "GatheringWidgetExtension" target */,
+			);
+			path = GatheringWidget;
+			sourceTree = "<group>";
+		};
 		2A4D39463081EF2200DD85AA /* EventMap */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2A1DDF1730A2DC9900A0006E /* Exceptions for "EventMap" folder in "GatheringWidgetExtension" target */,
+			);
 			path = EventMap;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2A1DDEF630A2C85000A0006E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				2A1DDEFE30A2C85000A0006E /* SwiftUI.framework in Frameworks */,
+				2A1DDEFC30A2C85000A0006E /* WidgetKit.framework in Frameworks */,
+			);
+		};
 		2ABEF82030807AD300BEEB78 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -35,18 +98,48 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2A1DDEFA30A2C85000A0006E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2A1DDEFB30A2C85000A0006E /* WidgetKit.framework */,
+				2A1DDEFD30A2C85000A0006E /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		2ABEF81A30807AD300BEEB78 = {
 			isa = PBXGroup;
 			children = (
 				2AC2525A3085A330003212C6 /* jiifoo-Info.plist */,
 				2A4D39463081EF2200DD85AA /* EventMap */,
 				2ABEF82330807AD300BEEB78 /* jiifoo.app */,
+				2A1DDEF930A2C85000A0006E /* GatheringWidgetExtension.appex */,
+				2A1DDEFF30A2C85100A0006E /* GatheringWidget */,
+				2A1DDEFA30A2C85000A0006E /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		2A1DDEF830A2C85000A0006E /* GatheringWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A1DDF0F30A2C85300A0006E /* Build configuration list for PBXNativeTarget "GatheringWidgetExtension" */;
+			buildPhases = (
+				2A1DDEF530A2C85000A0006E /* Sources */,
+				2A1DDEF630A2C85000A0006E /* Frameworks */,
+				2A1DDEF730A2C85000A0006E /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				2A1DDEFF30A2C85100A0006E /* GatheringWidget */,
+			);
+			name = GatheringWidgetExtension;
+			productName = GatheringWidgetExtension;
+			productReference = 2A1DDEF930A2C85000A0006E /* GatheringWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		2ABEF82230807AD300BEEB78 /* jiifoo */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2ABEF82E30807AD500BEEB78 /* Build configuration list for PBXNativeTarget "jiifoo" */;
@@ -54,8 +147,12 @@
 				2ABEF81F30807AD300BEEB78 /* Sources */,
 				2ABEF82030807AD300BEEB78 /* Frameworks */,
 				2ABEF82130807AD300BEEB78 /* Resources */,
+				2A1DDF1230A2C85300A0006E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
+			);
+			dependencies = (
+				2A1DDF0C30A2C85300A0006E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				2A4D39463081EF2200DD85AA /* EventMap */,
@@ -76,9 +173,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2700;
+				LastSwiftUpdateCheck = 2720;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					2A1DDEF830A2C85000A0006E = {
+						CreatedOnToolsVersion = 27.2;
+					};
 					2ABEF82230807AD300BEEB78 = {
 						CreatedOnToolsVersion = 27.0;
 					};
@@ -103,11 +203,17 @@
 			projectRoot = "";
 			targets = (
 				2ABEF82230807AD300BEEB78 /* jiifoo */,
+				2A1DDEF830A2C85000A0006E /* GatheringWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2A1DDEF730A2C85000A0006E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		2ABEF82130807AD300BEEB78 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -116,6 +222,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2A1DDEF530A2C85000A0006E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		2ABEF81F30807AD300BEEB78 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -123,7 +234,77 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2A1DDF0C30A2C85300A0006E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2A1DDEF830A2C85000A0006E /* GatheringWidgetExtension */;
+			targetProxy = 2A1DDF0B30A2C85300A0006E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		2A1DDF1030A2C85300A0006E /* Debug configuration for PBXNativeTarget "GatheringWidgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R974XU3YX5;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GatheringWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = GatheringWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.jiifoo.GatheringWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		2A1DDF1130A2C85300A0006E /* Release configuration for PBXNativeTarget "GatheringWidgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R974XU3YX5;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GatheringWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = GatheringWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.jiifoo.GatheringWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		2ABEF82C30807AD500BEEB78 /* Debug configuration for PBXProject "jiifoo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -257,6 +438,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "jiifoo-Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "現在地表示";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -291,6 +473,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "jiifoo-Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "現在地表示";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -316,6 +499,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2A1DDF0F30A2C85300A0006E /* Build configuration list for PBXNativeTarget "GatheringWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A1DDF1030A2C85300A0006E /* Debug configuration for PBXNativeTarget "GatheringWidgetExtension" */,
+				2A1DDF1130A2C85300A0006E /* Release configuration for PBXNativeTarget "GatheringWidgetExtension" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		2ABEF81E30807AD300BEEB78 /* Build configuration list for PBXProject "jiifoo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
