@@ -5,6 +5,7 @@ import MapKit
 struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventStore.self) private var eventStore
+    @Environment(AuthManager.self) private var authManager
     // 設定画面の「参加できる範囲を表示」と同じ名前で読む
     @AppStorage("showJoinableRange") private var showJoinableRange = true
 
@@ -147,14 +148,21 @@ struct EventMapView: View {
         }
         // 「+」でイベント作成画面を表示
         .sheet(isPresented: $showCreateEvent) {
-            CreateEventView()
+            // 作成に成功したらシートを閉じてマップに戻る
+            CreateEventView(onCreated: { showCreateEvent = false })
                 .environment(eventStore)
                 .environment(locationManager)
+                .environment(authManager)
         }
         // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
+                let previous = gatheringEvent?.id
                 gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                // 集合モードが始まった・終わったら地図を読み直す(終わったイベントを消すため)
+                if previous != gatheringEvent?.id {
+                    await eventStore.reload()
+                }
                 try? await Task.sleep(for: .seconds(30))
             }
         }
@@ -169,7 +177,18 @@ struct EventMapView: View {
             GatheringView(event: event)
                 .environment(locationManager)
         }
+        //通知がタップされたら、集合画面を開く
+        .onChange(of: NotificationDelegate.shared.tappedEventID){_,eventID in
+            guard let eventID else {return}
+            Task{
+                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                if let gatheringEvent, gatheringEvent.id == eventID{
+                    openedGathering = gatheringEvent
+                }
+            NotificationDelegate.shared.tappedEventID = nil //開いたら連絡板を消す    
+        }
     }
+}
 
     // 集合モードのバナー(body が長くなりすぎないよう分けている)
     private func gatheringBanner(for event: GatheringEvent) -> some View {
@@ -218,34 +237,30 @@ struct EventMapView: View {
                 wasFollowing = cameraPosition.followsUserLocation
             }
             selectedEventID=event.id
-            flyToEvent(event)
+            zoomToEvent(event)
         }
     }
 
-    // MARK: - 3Dカメラ
+    // MARK: - カメラ
     // 現在地をおよそ100m単位に丸めた値。これが変わると .task が動き直す
     private var locationKey: String {
         guard let location = locationManager.userLocation else { return "none" }
         return String(format: "%.3f,%.3f", location.latitude, location.longitude)
     }
 
-    private let orbitDistance: Double = 800   // 近づく距離(m)
-    private let orbitPitch: Double = 60       // 傾き(度)
-    private let orbitStep: Double = 15        // 1回で回る角度(度)
-    private let orbitSeconds: Double = 3.3    // 1回にかける秒数（大きいほどゆっくり）
-    private let pinScreenRatio: CGFloat = 0.25 // ピンを置きたい位置（上から1/4）
+    private let zoomDistance: Double = 800      // 近づく距離(m)
+    private let pinScreenRatio: CGFloat = 0.25  // ピンを置きたい位置（上から1/4。下の詳細シートに隠れないように）
 
-    // ピンを選んだとき：斜めから寄る → ゆっくり回り続ける
-    private func flyToEvent(_ event: Event) {
+    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
+    private func zoomToEvent(_ event: Event) {
         cameraTask?.cancel()   // 前の動きを止める
-        let startHeading = lastCamera?.heading ?? 0
+        let heading = lastCamera?.heading ?? 0   // 今の向きのまま
 
         cameraTask = Task { @MainActor in
-            // ① 斜めから寄る
-            withAnimation(.easeInOut(duration: 2)) {
-                cameraPosition = .camera(orbitCamera(around: event.coordinate, heading: startHeading))
+            withAnimation(.easeInOut(duration: 1.5)) {
+                cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
             }
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
 
             // 初回だけ：実際の画面で位置を測って、ピンが上から1/4に来るよう微調整
@@ -253,41 +268,30 @@ struct EventMapView: View {
                 let screen = UIScreen.main.bounds.size
                 let target = CGPoint(x: screen.width / 2, y: screen.height * pinScreenRatio)
                 if let ground = proxy.convert(target, from: .global) {
-                    let forward = forwardMeters(from: event.coordinate, to: ground, heading: startHeading)
+                    let forward = forwardMeters(from: event.coordinate, to: ground, heading: heading)
                     measuredOffset = currentOffset + forward
                     withAnimation(.easeInOut(duration: 0.6)) {
-                        cameraPosition = .camera(orbitCamera(around: event.coordinate, heading: startHeading))
+                        cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
                     }
-                    try? await Task.sleep(for: .seconds(0.6))
                 }
-            }
-
-            // ② キャンセルされるまでゆっくり回転
-            var heading = startHeading
-            while !Task.isCancelled {
-                heading += orbitStep
-                withAnimation(.linear(duration: orbitSeconds)) {
-                    cameraPosition = .camera(orbitCamera(around: event.coordinate, heading: heading))
-                }
-                try? await Task.sleep(for: .seconds(orbitSeconds))
             }
         }
     }
 
     // 今のずらし量（測る前は仮の値）
-    private var currentOffset: Double { measuredOffset ?? 300 }
+    private var currentOffset: Double { measuredOffset ?? 200 }
 
     // ピンが画面の上側に見えるカメラを作る（向いている方向の手前へ中心をずらす）
-    private func orbitCamera(around coordinate: CLLocationCoordinate2D, heading: Double) -> MapCamera {
+    private func zoomCamera(around coordinate: CLLocationCoordinate2D, heading: Double) -> MapCamera {
         let rad = (heading + 180) * .pi / 180
         let dLat = currentOffset * cos(rad) / 111_000
         let dLon = currentOffset * sin(rad) / (111_000 * cos(coordinate.latitude * .pi / 180))
         let center = CLLocationCoordinate2D(latitude: coordinate.latitude + dLat,
                                             longitude: coordinate.longitude + dLon)
         return MapCamera(centerCoordinate: center,
-                         distance: orbitDistance,
+                         distance: zoomDistance,
                          heading: heading,
-                         pitch: orbitPitch)
+                         pitch: 0)   // 0 = 真上から見る(2D)
     }
 
     // from から to が、向いている方向に何m先にあるか
@@ -304,7 +308,7 @@ struct EventMapView: View {
         let follow = wasFollowing
         savedCamera = nil
 
-        cameraTask?.cancel()   // 回転を止める
+        cameraTask?.cancel()
         if follow { isReturningHome = true }
 
         cameraTask = Task { @MainActor in
@@ -314,7 +318,7 @@ struct EventMapView: View {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
 
-            // 追従中だった場合は追従モードに戻す（傾きは元の2Dのまま）
+            // 追従中だった場合は追従モードに戻す
             if follow {
                 cameraPosition = .userLocation(fallback: .automatic)
             }
@@ -352,4 +356,5 @@ struct EventMapView: View {
     EventMapView()
         .environment(LocationManager())
         .environment(EventStore(events: sampleEvents))
+        .environment(AuthManager())
 }

@@ -16,7 +16,8 @@ struct MainTabView: View {
             
             if authManager.isCorporate{
                 //
-                CreateEventView()
+                // 作成に成功したらマップのタブへ切り替える
+                CreateEventView(onCreated: { selectedTab = 0 })
                     .tabItem{
                         Image(systemName: "plus.circle")
                         Text("イベント作成")
@@ -38,6 +39,15 @@ struct MainTabView: View {
                 .tag(2)
         }
         .sensoryFeedback(.selection, trigger: selectedTab)
+        // 通知の許可をリクエスト
+        .task{
+            await NotificationManager.requestPermission()
+        }
+        .onChange(of: NotificationDelegate.shared.tappedEventID){_, eventID in
+            if eventID != nil{
+                selectedTab = 0
+            }
+        }
     }
 }
 
