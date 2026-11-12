@@ -51,6 +51,21 @@ nonisolated struct Organization:Codable,Identifiable,Hashable,Sendable{
     let name:String
 }
 
+//自身が所属している法人と審査状態
+nonisolated struct MyOrganization: Codable,Identifiable,Hashable,Sendable{
+    let id: UUID
+    let name:String
+    let reviewStatus:String //審査中（pending）、承認済み（approved）、却下（rejected）の3つ
+    let status:String //アカウントが有効か（activeかsuspendedで判定）
+    let role:String //役割判定(owner,admin,member)
+
+    enum CodingKeys: String, CodingKey{
+        case id,name,status,role
+        case reviewStatus = "review_status"
+    }
+}
+
+
 // MARK: - データの形(Supabase に送る)
 
 nonisolated struct NewEvent: Encodable, Sendable {
@@ -258,8 +273,24 @@ enum JiifooAPI {
             .value
     }
 
-        // ③ enum JiifooAPI { ... } の中に追加する関数
- 
+    //法人申請
+    static func applyOrganization(name:String,corporateNumber:String) async throws -> String{
+        try await supabase
+            .rpc("apply_organization", params: [
+                "p_name":name,
+                "p_corporate_number":corporateNumber
+                ])
+            .execute()
+            .value
+    }
+
+    // 自分が所属している法人と審査状態
+    static func myOrganizations() async throws -> [MyOrganization]{
+        try await supabase
+            .rpc("my_organizations")
+            .execute()
+            .value
+    }
     // 自分が今「集合中」のイベント(なければ nil)
     static func myGatheringEvent() async throws -> GatheringEvent? {
         let list: [GatheringEvent] = try await supabase

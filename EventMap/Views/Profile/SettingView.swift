@@ -16,6 +16,7 @@ struct SettingsView: View {
 
     @State private var email: String?
     @State private var showLogoutDialog = false
+    @State private var organizations: [MyOrganization] = [] //自身が所属している法人
 
     // アプリのバージョン(Xcode の設定から自動で取得)
     private var appVersion: String {
@@ -28,6 +29,23 @@ struct SettingsView: View {
                 // ---- アカウント ----
                 Section("アカウント") {
                     LabeledContent("メールアドレス", value: email ?? "読み込み中…")
+                }
+
+                //---- 法人 ----
+                Section{
+                    if let organization = organizations.first{
+                        LabeledContent("法人名", value: organization.name)
+                        LabeledContent("審査の状態", value: reviewStatusText(organization.reviewStatus))
+                    }
+                    if canApply{
+                        NavigationLink("法人として申請する"){
+                            OrganizationApplyView()
+                        }
+                    }
+                } header: {
+                    Text("法人")
+                } footer:{
+                    Text("法人として承認されるとイベント作成を行えます。")
                 }
 
                 // ---- 表示 ----
@@ -87,10 +105,35 @@ struct SettingsView: View {
             .task {
                 email = try? await supabase.auth.session.user.email
             }
+            //画面が表示されるたびに、法人の状態を読み直す
+            .onAppear{
+                Task { await loadOrganizations() }
+            }
         }
+    }
+
+
+//申請が可能か（未申請、もしくは却下された状態の時）
+private var canApply: Bool {
+    guard let organization = organizations.first else {return true}
+    return organization.reviewStatus == "rejected"
+}
+
+//審査の状態を日本語に直す
+private func reviewStatusText(_ status: String) -> String {
+    switch status {
+        case "pending": return "審査中"
+        case "approved": return "承認済み"
+        case "rejected": return "却下"
+        default: return status
     }
 }
 
+//自分が所属している法人を読み込む
+private func loadOrganizations() async {
+    organizations = (try? await JiifooAPI.myOrganizations()) ?? []
+}
+}
 #Preview {
     SettingsView()
 }
