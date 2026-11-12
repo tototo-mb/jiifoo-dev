@@ -5,6 +5,7 @@ import Supabase
 // 設定の項目が増えたら、ここに Section を足していく
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthManager.self) private var authManager
 
     // マップに「参加できる範囲(800m)」を表示するか
     // EventMapView でも同じ名前で読んでいるので、ここで変えるとすぐ反映される
@@ -132,8 +133,12 @@ private func reviewStatusText(_ status: String) -> String {
 //自分が所属している法人を読み込む
 private func loadOrganizations() async {
     organizations = (try? await JiifooAPI.myOrganizations()) ?? []
+    await authManager.reloadOrganizations() //タブの切り替え時にユーザー資格を反映させる
 }
+
+
 }
 #Preview {
     SettingsView()
+    .environment(AuthManager())
 }
