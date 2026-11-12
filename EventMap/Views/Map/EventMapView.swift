@@ -49,9 +49,9 @@ struct EventMapView: View {
         // 集合モードの光とカウントダウン（GroupModeUI.swift）
         .gatheringModeOverlay()
         // ▼ テスト用：起動したら10分後集合で集合モードを始める（集合機能ができたら消す）
-        .onAppear {
+        /*.onAppear {
             if !gathering.isActive { gathering.start(title: "集合", minutes: 10) }
-        }
+        }*/
         // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
         .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
@@ -107,7 +107,9 @@ struct EventMapView: View {
                 .environment(locationManager)
                 .presentationDetents([.medium, .large])
         }
+        
         // 「+」でイベント作成画面を表示
+        /*
         .sheet(isPresented: $showCreateEvent) {
             // 作成に成功したらシートを閉じてマップに戻る
             CreateEventView(onCreated: { showCreateEvent = false })
@@ -115,6 +117,8 @@ struct EventMapView: View {
                 .environment(locationManager)
                 .environment(authManager)
         }
+        */
+
         // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
@@ -204,11 +208,13 @@ struct EventMapView: View {
             }
 
             // イベント作成ボタン
+            /*
             circleButton(systemName: "plus") {
                 showCreateEvent = true
             }
             .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
-
+            */
+            
             // 現在地ボタン
             circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
                 backTo2D()
