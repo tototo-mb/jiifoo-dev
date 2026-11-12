@@ -18,13 +18,18 @@ final class AuthManager{
             
             //法人としてログインしたら一覧を取得、ログアウトしたらからにする
             if session != nil {
-                organizations=(try? await JiifooAPI.myPostableOrganizations()) ?? []
+                await reloadOrganizations()
             }else{
                 organizations=[]
             }
             
             //法人か個人か判定してから画面を出す
             isChecking=false
+        }
+    }
+    func reloadOrganizations() async {
+        if let list = try? await JiifooAPI.myPostableOrganizations(){
+            organizations = list
         }
     }
 }

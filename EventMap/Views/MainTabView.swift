@@ -5,6 +5,11 @@ struct MainTabView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var selectedTab = 0
 
+    //アプリが戻ったら読み直しして法人審査状況を反映させる
+    @Environment(\.scenePhase) private var scenePhase //アプリが前面にあるか
+
+
+
     var body: some View {
         TabView(selection: $selectedTab) {
             EventMapView()
@@ -46,6 +51,11 @@ struct MainTabView: View {
         .onChange(of: NotificationDelegate.shared.tappedEventID){_, eventID in
             if eventID != nil{
                 selectedTab = 0
+            }
+        }
+        .onChange(of: scenePhase){_,phase in
+            if phase == .active{
+                Task{ await authManager.reloadOrganizations() }
             }
         }
     }
