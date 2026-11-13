@@ -143,7 +143,10 @@ final class EventStore {
         coordinate: CLLocationCoordinate2D,
         startsAt: Date,
         capacity: Int?,
-        organizationId:UUID?
+        organizationId:UUID?,
+        joinType: JoinType,
+        endsAt: Date?
+
     ) async -> Bool {
         do {
             //Supabaseにイベントを送る
@@ -156,7 +159,10 @@ final class EventStore {
                 longitude: coordinate.longitude,
                 startsAt: startsAt,
                 capacity: capacity,
-                organizationId: organizationId
+                organizationId: organizationId,
+                // 11/13追加分
+                joinType: joinType,
+                endsAt: endsAt
             )
             //主催者にも集合モードの通知を予約
             await NotificationManager.scheduleGathering(id: newID,
