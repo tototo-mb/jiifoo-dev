@@ -19,6 +19,13 @@ struct EventDetailView: View {
             List {
                 Section {
                     //LabeledContent("カテゴリ", value: event.category)
+                    LabeledContent("タイプ",value: event.joinType.label)
+                    //途中参加OK型のイベントは終了時刻も表示する
+                    if event.joinType == .dropIn {
+                        LabeledContent("終了"){
+                            Text(event.endsAt, format: .dateTime.hour().minute())
+                        }
+                    }
                     LabeledContent("開始") {
                         Text(event.startsAt, format: .dateTime.year().month().day().hour().minute())
                     }

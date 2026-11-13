@@ -72,8 +72,10 @@ final class EventStore {
     // 同じ時間帯(開始時刻の差が1時間未満)に、すでに主催・参加しているイベント
     // ※最終的な判定は Supabase の reserve_event が行う(ここは見た目のため)
     func conflictingEvent(for event: Event) -> Event? {
-        events.first { other in
+        guard event.joinType == .fixed else { return nil } //追加
+        return events.first { other in
             other.id != event.id
+                && other.joinType == .fixed //追加
                 && joinedEventIDs.contains(other.id)
                 && abs(other.startsAt.timeIntervalSince(event.startsAt)) < 60 * 60
         }
@@ -165,11 +167,13 @@ final class EventStore {
                 endsAt: endsAt
             )
             //主催者にも集合モードの通知を予約
-            await NotificationManager.scheduleGathering(id: newID,
-            title: title,
-            placeName: placeName,
-             startsAt: startsAt
-             )
+            if joinType == .fixed{
+                await NotificationManager.scheduleGathering(id: newID,
+                title: title,
+                placeName: placeName,
+                startsAt: startsAt
+                )
+            }
             // ② 地図を読み込み直す
             await reload()
             // ③ 成功を返す

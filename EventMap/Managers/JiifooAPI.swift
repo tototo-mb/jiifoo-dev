@@ -35,9 +35,14 @@ nonisolated struct EventPin: Codable, Identifiable, Sendable {
     let capacity: Int?
     let participantCount: Int
     let distanceM: Double
+    // 11/13追加分
+    let joinType: JoinType
+    let endsAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id, title, category, kind, description, latitude, longitude, capacity
+        case joinType = "join_type"
+        case endsAt = "ends_at"
         case creatorId = "creator_id"
         case placeName = "place_name"
         case startsAt = "starts_at"
@@ -125,9 +130,11 @@ nonisolated struct GatheringEvent: Codable, Identifiable, Sendable {
     let creatorId: UUID
     let kind: String
     let myStatus: String          // "reserved"(まだ) / "checked_in"(到着済み)
+    let endsAt: Date
  
     enum CodingKeys: String, CodingKey {
         case id, title, latitude, longitude, kind
+        case endsAt = "ends_at"
         case placeName = "place_name"
         case startsAt = "starts_at"
         case creatorId = "creator_id"

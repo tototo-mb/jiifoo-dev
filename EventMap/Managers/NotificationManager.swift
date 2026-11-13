@@ -34,6 +34,7 @@ static func scheduleGathering(id: UUID,
 
 
     static func scheduleGathering(for event: Event) async{
+            guard event.joinType == .fixed else { return } //追加分
             await scheduleGathering(id: event.id,
                                 title: event.title,
                                 placeName: event.placeName,

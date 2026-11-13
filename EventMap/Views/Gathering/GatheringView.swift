@@ -34,9 +34,8 @@ struct GatheringView: View {
     private var isNear: Bool { (distance ?? .infinity) <= Self.checkInRadius }
     private var isCheckedIn: Bool { myStatus == "checked_in" }
     private var arrivedCount: Int { members.filter(\.checkedIn).count }
-    //集合モードが終わる時刻（データベースのevent_pahseと同じ開始から１時間後に設定）
-    /*private var endsAt: Date { Date().addingTimeInterval(120)}*/  //テスト用                     
-    private var endsAt: Date { event.startsAt.addingTimeInterval(60 * 60) } // 本番用
+    //集合モードが終わる時刻（サーバーのends_atと同じ）                 
+    private var endsAt: Date { event.endsAt}
 
 
     var body: some View {
