@@ -339,15 +339,18 @@ struct EventMapView: View {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
 
-            // 初回だけ：実際の画面で位置を測って、ピンが上から1/4に来るよう微調整
-            if measuredOffset == nil, let proxy = mapProxy {
+            // 11/13 実際の画面で位置を計算して、ピンが上から1/4に来るよう調整
+            if let proxy = mapProxy {
                 let screen = UIScreen.main.bounds.size
                 let target = CGPoint(x: screen.width / 2, y: screen.height * pinScreenRatio)
                 if let ground = proxy.convert(target, from: .global) {
                     let forward = forwardMeters(from: event.coordinate, to: ground, heading: heading)
-                    measuredOffset = currentOffset + forward
-                    withAnimation(.easeInOut(duration: 0.6)) {
-                        cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
+                    //20m以上ズレている時のみ修正
+                    if abs(forward) > 20{
+                        measuredOffset = currentOffset + forward
+                        withAnimation(.easeInOut(duration: 0.6)) {
+                            cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
+                        }
                     }
                 }
             }
@@ -430,6 +433,7 @@ struct EventMapView: View {
         }
     }
 }
+
 
 #Preview {
     EventMapView()
