@@ -135,6 +135,52 @@ final class EventStore {
             await reload()
         }
     }
+
+    func cancelEvent(_ event: Event) {
+        Task{
+            do{
+                let result = try await JiifooAPI.cancelEvent(eventId: event.id)
+                switch result {
+                    case "ok","already_cancelled":
+                        //自分のデバイスに保存している通知も取り消し
+                        NotificationManager.cancelGathering(eventID: event.id)
+                    case "already_started":
+                        message = "開始したイベントは中止できません"
+                    case "not_allowed":
+                        message = "イベント主催者だけがキャンセルできます"
+                    default:
+                        message = "中止できませんでした(\(result))"
+                }
+            } catch {
+                message = "通信エラー：イベント中止できませんでした"
+            }
+            await reload()
+        }
+    }
+
+    //イベント終了(途中参加可能型の主催者用)
+    func end(_ event: Event){
+        Task{
+            do{
+                let result = try await JiifooAPI.endEvent(eventId: event.id)
+                switch result{
+                case "ok":
+                    break //成功：リロードしたら消える
+                case "not_started":
+                    message = "開始前のイベント終了はできません" //ここ変える、開始前でも中止できるようにする
+                case "already_finished":
+                    message = "このイベントはすでに終了しています"
+                case "not_allowed":
+                    message = "イベント主催者のみ終了できます"
+                default:
+                    message = "終了できませんでした(\(result))"
+                }
+            }catch{
+                message = "通信エラーで終了できませんでした"
+            }
+            await reload()
+        }
+    }
     
     //イベントを作る
     func create(

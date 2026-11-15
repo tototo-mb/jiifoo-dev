@@ -290,6 +290,13 @@ enum JiifooAPI {
             .execute()
             .value
     }
+    //イベント終了
+    static func endEvent(eventId: UUID) async throws -> String{
+        try await supabase
+            .rpc("end_event",params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
         // イベントを中止する(結果: ok / already_started / not_allowed など)
     static func cancelEvent(eventId: UUID) async throws -> String {
         try await supabase
