@@ -72,8 +72,10 @@ final class EventStore {
     // 同じ時間帯(開始時刻の差が1時間未満)に、すでに主催・参加しているイベント
     // ※最終的な判定は Supabase の reserve_event が行う(ここは見た目のため)
     func conflictingEvent(for event: Event) -> Event? {
-        events.first { other in
+        guard event.joinType == .fixed else { return nil } //追加
+        return events.first { other in
             other.id != event.id
+                && other.joinType == .fixed //追加
                 && joinedEventIDs.contains(other.id)
                 && abs(other.startsAt.timeIntervalSince(event.startsAt)) < 60 * 60
         }
@@ -133,6 +135,52 @@ final class EventStore {
             await reload()
         }
     }
+
+    func cancelEvent(_ event: Event) {
+        Task{
+            do{
+                let result = try await JiifooAPI.cancelEvent(eventId: event.id)
+                switch result {
+                    case "ok","already_cancelled":
+                        //自分のデバイスに保存している通知も取り消し
+                        NotificationManager.cancelGathering(eventID: event.id)
+                    case "already_started":
+                        message = "開始したイベントは中止できません"
+                    case "not_allowed":
+                        message = "イベント主催者だけがキャンセルできます"
+                    default:
+                        message = "中止できませんでした(\(result))"
+                }
+            } catch {
+                message = "通信エラー：イベント中止できませんでした"
+            }
+            await reload()
+        }
+    }
+
+    //イベント終了(途中参加可能型の主催者用)
+    func end(_ event: Event){
+        Task{
+            do{
+                let result = try await JiifooAPI.endEvent(eventId: event.id)
+                switch result{
+                case "ok":
+                    break //成功：リロードしたら消える
+                case "not_started":
+                    message = "開始前のイベント終了はできません" //ここ変える、開始前でも中止できるようにする
+                case "already_finished":
+                    message = "このイベントはすでに終了しています"
+                case "not_allowed":
+                    message = "イベント主催者のみ終了できます"
+                default:
+                    message = "終了できませんでした(\(result))"
+                }
+            }catch{
+                message = "通信エラーで終了できませんでした"
+            }
+            await reload()
+        }
+    }
     
     //イベントを作る
     func create(
@@ -143,7 +191,10 @@ final class EventStore {
         coordinate: CLLocationCoordinate2D,
         startsAt: Date,
         capacity: Int?,
-        organizationId:UUID?
+        organizationId:UUID?,
+        joinType: JoinType,
+        endsAt: Date?
+
     ) async -> Bool {
         do {
             //Supabaseにイベントを送る
@@ -156,14 +207,19 @@ final class EventStore {
                 longitude: coordinate.longitude,
                 startsAt: startsAt,
                 capacity: capacity,
-                organizationId: organizationId
+                organizationId: organizationId,
+                // 11/13追加分
+                joinType: joinType,
+                endsAt: endsAt
             )
             //主催者にも集合モードの通知を予約
-            await NotificationManager.scheduleGathering(id: newID,
-            title: title,
-            placeName: placeName,
-             startsAt: startsAt
-             )
+            if joinType == .fixed{
+                await NotificationManager.scheduleGathering(id: newID,
+                title: title,
+                placeName: placeName,
+                startsAt: startsAt
+                )
+            }
             // ② 地図を読み込み直す
             await reload()
             // ③ 成功を返す

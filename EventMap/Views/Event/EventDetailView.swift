@@ -5,10 +5,21 @@ struct EventDetailView: View {
     let event: Event
     @Environment(EventStore.self) private var eventStore
     @Environment(LocationManager.self) private var locationManager
-    @State private var showCancelDialog = false
+    @State private var showCancelEventDialog = false //中止の確認を出す？
+    private var canCancelEvent: Bool {isMine && event.startsAt > .now} // 自分が主催していて、まだ始まっていないときだけ中止できる
+    @State private var showCancelDialog = false 
+    
 
     private var isJoined: Bool { eventStore.isJoined(event) }
     private var isMine: Bool { eventStore.isMine(event) }
+
+    @State private var showEndDialog = false //終了の確認を出すか
+
+    //途中参加OK型での主催者かつすでにイベントが始まっている時のみ終了できる
+    private var canEnd: Bool {
+        isMine && event.joinType == .dropIn && event.startsAt <= .now
+    }
+
     private var distance: Double? { locationManager.distance(to: event.coordinate) }
     private var isJoinable: Bool { locationManager.isJoinable(event.coordinate) }
     // 同じ時間帯に参加予定のイベント(あれば参加できない)
@@ -19,6 +30,13 @@ struct EventDetailView: View {
             List {
                 Section {
                     //LabeledContent("カテゴリ", value: event.category)
+                    LabeledContent("タイプ",value: event.joinType.label)
+                    //途中参加OK型のイベントは終了時刻も表示する
+                    if event.joinType == .dropIn {
+                        LabeledContent("終了"){
+                            Text(event.endsAt, format: .dateTime.hour().minute())
+                        }
+                    }
                     LabeledContent("開始") {
                         Text(event.startsAt, format: .dateTime.year().month().day().hour().minute())
                     }
@@ -46,12 +64,26 @@ struct EventDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    if canCancelEvent {
+                        Button("イベントを中止する", role: .destructive) {
+                            showCancelEventDialog = true
+                        }
+                    }
+                    //途中参加OK型の主催者はイベント開催後にイベントを終了できる
+                    if canEnd {
+                        Button("イベントを終了する", role: .destructive) {
+                            showEndDialog = true
+                        }
+                    }
+
                     // 同じ時間帯のイベントに参加予定のときの説明
                     if !isJoined && !isMine, let conflictingEvent {
                         Text("同じ時間帯の「\(conflictingEvent.title)」に参加予定のため参加できません")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+
+
 
                     Button {
                         if isJoined {
@@ -79,6 +111,24 @@ struct EventDetailView: View {
                 Button("参加をキャンセル", role: .destructive) {
                     withAnimation { eventStore.cancel(event) }
                 }
+            }
+            .confirmationDialog("イベントを中止しますか？",
+                                isPresented: $showCancelEventDialog,
+                                titleVisibility: .visible) {
+                Button("イベントを中止", role: .destructive) {
+                    eventStore.cancelEvent(event)
+                }
+            } message: {
+                Text("イベント参加者の予定からも削除されます。よろしいですか？")
+            }
+            .confirmationDialog("イベントを終了しますか？",
+                                isPresented: $showEndDialog,
+                                titleVisibility: .visible){
+                Button("イベントを終了する", role: .destructive){
+                    eventStore.end(event)
+                }
+            } message: {
+                Text("参加者の地図からも消えます")
             }
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)

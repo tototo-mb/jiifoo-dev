@@ -18,6 +18,9 @@ struct Event: Identifiable, Sendable {
     let startsAt: Date            // 開始時刻
     let capacity: Int?             // 募集人数(作成者を含まない)
     let participantCount: Int     // 現在の参加人数(作成者を含まない)
+    let joinType: JoinType        //イベントタイプ
+    let endsAt: Date              //終了時刻
+
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -43,7 +46,9 @@ struct Event: Identifiable, Sendable {
         scale: EventScale,
         startsAt: Date = Date().addingTimeInterval(30 * 60),
         capacity: Int? = 5,
-        participantCount: Int = 0
+        participantCount: Int = 0,
+        joinType: JoinType = .fixed,
+        endsAt: Date? = nil 
     ) {
         self.id = id
         self.creatorID = creatorID
@@ -59,6 +64,8 @@ struct Event: Identifiable, Sendable {
         self.startsAt = startsAt
         self.capacity = capacity
         self.participantCount = participantCount
+        self.joinType = joinType
+        self.endsAt = endsAt ?? startsAt  //省略されたら開始時刻（時間厳守型と同じ）
     }
 
     // Supabase から受け取ったデータから作る
@@ -76,7 +83,9 @@ struct Event: Identifiable, Sendable {
             scale: pin.kind == "corporate" ? .businessMode : .privateMode,
             startsAt: pin.startsAt,
             capacity: pin.capacity,
-            participantCount: pin.participantCount
+            participantCount: pin.participantCount,
+            joinType: pin.joinType,
+            endsAt: pin.endsAt
         )
     }
 }

@@ -17,7 +17,10 @@ struct CreateEventView: View {
     @State private var capacity = 3
     @State private var isSaving = false
     @State private var hasCapacityLimit = true
+    @State private var joinType: JoinType = .fixed //イベントタイプ（合コン型orお祭り型）
+    @State private var durationHours = 2 //お祭り型の開催時間の初期値
 
+ 
     // 地図用
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var pickedCoordinate: CLLocationCoordinate2D?
@@ -40,6 +43,22 @@ struct CreateEventView: View {
                     TextField("コメント", text: $description, axis: .vertical)
                 }
 
+                //法人のイベントタイプの選択が可能（個人で開催する場合は時間厳守タイプのみ）
+                if authManager.isCorporate{
+                    Section{
+                        Picker("タイプ",selection: $joinType){
+                            ForEach(JoinType.allCases,id: \.self){type in
+                                Text(type.label).tag(type)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        Text("イベントタイプ")
+                    } footer: {
+                        Text(joinTypeDescription)
+                    }
+                }
+
                 Section("集合") {
                     // 表示用の名前だけ入力する（検索は下の欄で行う）
                     TextField("集合場所（例：渋谷駅　ハチ公前）", text: $placeName)
@@ -47,13 +66,22 @@ struct CreateEventView: View {
                     DatePicker("開始時刻", selection: $startsAt,
                                in: startsAtRange,
                                displayedComponents: [.date, .hourAndMinute])
-                    Toggle("募集人数に上限を設ける", isOn: $hasCapacityLimit)
-                    if hasCapacityLimit {
-                        Picker("募集人数", selection: $capacity) {
-                            ForEach(1...10, id: \.self) { n in
-                                Text("\(n)人").tag(n)
+                    switch joinType {
+                        case .fixed:
+                            Toggle("募集人数に上限を設ける", isOn: $hasCapacityLimit)
+                            if hasCapacityLimit {
+                                Picker("募集人数", selection: $capacity) {
+                                    ForEach(1...10, id: \.self) { n in
+                                        Text("\(n)人").tag(n)
+                                }
                             }
                         }
+                        case .dropIn:
+                            Picker("開催時間",selection: $durationHours){
+                                ForEach([1,2,3,6,8],id: \.self){ hours in
+                                     Text("\(hours)時間").tag(hours)
+                                }
+                            }
                     }
                 }
 
@@ -136,6 +164,18 @@ struct CreateEventView: View {
         return from...to
     }
 
+
+    private var joinTypeDescription: String{
+        switch joinType{
+            case .fixed:
+                return "開始時刻に集合します。人数の上限を決められます。集合モードが開始されると参加を締め切ります。"
+            case .dropIn:
+                return "指定した開催時間中は自由に参加できます。人数の上限はありません。"
+        }
+    }
+
+
+
     private func save() {
         // 地図で選んだ場所。選んでいなければ現在地
         guard let coordinate = pickedCoordinate ?? locationManager.userLocation else { return }
@@ -149,10 +189,15 @@ struct CreateEventView: View {
                 placeName: placeName,
                 coordinate: coordinate,
                 startsAt: startsAt,
-                capacity: hasCapacityLimit ? capacity : nil,
+                capacity: (joinType == .fixed && hasCapacityLimit) ? capacity : nil,
                 // 法人なら法人IDを送る → Supabase 側で法人イベント(corporate)として扱われる
                 // TODO: 複数の法人に所属している場合は、どの法人として作るか選べるようにする
-                organizationId: authManager.organizations.first?.id
+                organizationId: authManager.organizations.first?.id,
+                joinType: joinType,
+                //途中参加できるイベントだけ終了時刻を送る
+                endsAt: joinType == .dropIn
+                    ? startsAt.addingTimeInterval(Double(durationHours) * 60 * 60)
+                    : nil
             )
             isSaving = false
             // 成功したら入力を空に戻して、マップへ戻る(失敗時はアラートが出て画面はそのまま)
@@ -176,6 +221,8 @@ struct CreateEventView: View {
         pickID = nil
         searchText = ""
         inputMode = .map
+        joinType = .fixed
+        durationHours = 2
     }
 
     // 集合場所の名前で検索

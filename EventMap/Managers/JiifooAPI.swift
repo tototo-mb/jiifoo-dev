@@ -35,9 +35,14 @@ nonisolated struct EventPin: Codable, Identifiable, Sendable {
     let capacity: Int?
     let participantCount: Int
     let distanceM: Double
+    // 11/13追加分
+    let joinType: JoinType
+    let endsAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id, title, category, kind, description, latitude, longitude, capacity
+        case joinType = "join_type"
+        case endsAt = "ends_at"
         case creatorId = "creator_id"
         case placeName = "place_name"
         case startsAt = "starts_at"
@@ -68,6 +73,19 @@ nonisolated struct MyOrganization: Codable,Identifiable,Hashable,Sendable{
 
 // MARK: - データの形(Supabase に送る)
 
+nonisolated enum JoinType: String, CaseIterable,Codable,Sendable{
+    case fixed = "fixed" //合コン型(集合時間厳守)
+    case dropIn = "drop_in" //お祭り型（途中参加、途中帰宅OK）
+
+    //画面上の設定
+    var label: String{
+        switch self{
+        case .fixed: return "時間厳守タイプ"
+        case .dropIn: return "途中参加OKタイプ"
+        }
+    }
+}
+
 nonisolated struct NewEvent: Encodable, Sendable {
     let creatorId: UUID
     let organizationId:UUID?
@@ -78,9 +96,16 @@ nonisolated struct NewEvent: Encodable, Sendable {
     let location: String      // "SRID=4326;POINT(経度 緯度)" の形式
     let startsAt: Date
     let capacity: Int?
+    //11/13追加分
+    let joinType: JoinType
+    let endsAt: Date? //合コン型は送らない→トリガーが１時間後を自動で入れる
 
     enum CodingKeys: String, CodingKey {
         case title, category, description, location, capacity
+        //　11/13追加分
+        case joinType = "join_type"
+        case endsAt = "ends_at"
+        
         case creatorId = "creator_id"
         case organizationId="organization_id"
         case placeName = "place_name"
@@ -105,9 +130,11 @@ nonisolated struct GatheringEvent: Codable, Identifiable, Sendable {
     let creatorId: UUID
     let kind: String
     let myStatus: String          // "reserved"(まだ) / "checked_in"(到着済み)
+    let endsAt: Date
  
     enum CodingKeys: String, CodingKey {
         case id, title, latitude, longitude, kind
+        case endsAt = "ends_at"
         case placeName = "place_name"
         case startsAt = "starts_at"
         case creatorId = "creator_id"
@@ -185,7 +212,9 @@ enum JiifooAPI {
         longitude: Double,
         startsAt: Date,
         capacity: Int?,
-        organizationId:UUID?
+        organizationId:UUID?,
+        joinType: JoinType = .fixed,
+        endsAt: Date? = nil
         
     ) async throws -> UUID {
         let userId = try await supabase.auth.session.user.id
@@ -199,8 +228,12 @@ enum JiifooAPI {
             // PostGIS は「経度 緯度」の順なので注意
             location: "SRID=4326;POINT(\(longitude) \(latitude))",
             startsAt: startsAt,
-            capacity: capacity
+            capacity: capacity,
+            // 11/13追加分
+            joinType: joinType,
+            endsAt: endsAt
         )
+        
         let created: CreatedEvent = try await supabase
             .from("events")
             .insert(event)
@@ -254,6 +287,13 @@ enum JiifooAPI {
     static func cancel(eventId: UUID) async throws -> String {
         try await supabase
             .rpc("cancel_reservation", params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
+    //イベント終了
+    static func endEvent(eventId: UUID) async throws -> String{
+        try await supabase
+            .rpc("end_event",params: ["p_event_id": eventId])
             .execute()
             .value
     }

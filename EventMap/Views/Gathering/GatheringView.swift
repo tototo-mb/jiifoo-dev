@@ -19,6 +19,8 @@ struct GatheringView: View {
     @State private var message: String?
     @State private var camera: MapCameraPosition
     @State private var isEnded = false //集合モードが終わったか
+    @State private var isCreator = false //自分が主催者か
+    @State private var isEnding = false //終了の処理中か
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -34,9 +36,9 @@ struct GatheringView: View {
     private var isNear: Bool { (distance ?? .infinity) <= Self.checkInRadius }
     private var isCheckedIn: Bool { myStatus == "checked_in" }
     private var arrivedCount: Int { members.filter(\.checkedIn).count }
-    //集合モードが終わる時刻（データベースのevent_pahseと同じ開始から１時間後に設定）
-    /*private var endsAt: Date { Date().addingTimeInterval(120)}*/  //テスト用                     
-    private var endsAt: Date { event.startsAt.addingTimeInterval(60 * 60) } // 本番用
+    private var allArrived: Bool { !members.isEmpty && arrivedCount == members.count }
+    //集合モードが終わる時刻（サーバーのends_atと同じ）                 
+    private var endsAt: Date { event.endsAt}
 
 
     var body: some View {
@@ -145,10 +147,35 @@ struct GatheringView: View {
                 guard !Task.isCancelled else { return }
                 isEnded = true
             }
+            //自分が主催者か調べる
+            .task{
+                isCreator = await JiifooAPI.currentUserID() == event.creatorId
+            }
+            //
+            .task{
+                let channel = supabase.channel("gathering-event-\(event.id)")
+                let changes = channel.postgresChange(
+                    UpdateAction.self,
+                    schema: "public",
+                    table: "events",
+                    filter: .eq("id",value: event.id)
+                )
+                try? await channel.subscribeWithError()
+                for await change in changes{
+                    //終了(finished)か中止（cancelled）になったら閉じる
+                    let status = change.record["status"]?.stringValue
+                    if status == "finished" || status == "cancelled"{
+                        isEnded = true
+                    }
+                }
+                await supabase.removeChannel(channel)
+            }
             //集合モードが終わったら通知してOKボタンを押したら画面を閉じる
             .alert("集合モードが終了しました",isPresented: $isEnded){
                 Button("OK"){ dismiss()}
             }
+
+
         }
     }
 
@@ -174,6 +201,17 @@ struct GatheringView: View {
             .buttonStyle(.borderedProminent)
             .tint(isCheckedIn ? .green : .orange)
             .disabled(isCheckedIn || !isNear || isCheckingIn)
+            if isCreator {
+                Button("集合モードを終了する"){
+                    endGathering()
+                }
+                .disabled(!allArrived || isEnding)
+                if !allArrived {
+                    Text("制限時間より前に全員の集合が確認できた場合のみ可能")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -205,6 +243,23 @@ struct GatheringView: View {
                 message = "このイベントの参加者ではありません"
             default:
                 message = "チェックインできませんでした。通信状況を確認してください"
+            }
+        }
+    }
+
+    private func endGathering() {
+        isEnding = true
+        Task {
+            let result = (try? await JiifooAPI.endEvent(eventId: event.id)) ?? "error"
+            isEnding = false
+            switch result {
+                case "ok","not_gathering":
+                    isEnded = true //すでに終了している場合
+                case "not_all_arrived":
+                    message = "まだ到着していないユーザーがいます"
+                    await loadMembers()  //情報を読み直してラグがあるか確認   
+                default:
+                message = "終了できませんでした。通信状況を確認してください。" 
             }
         }
     }
