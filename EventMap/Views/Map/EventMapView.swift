@@ -119,11 +119,22 @@ struct EventMapView: View {
         }
         */
 
+        //ユーザーが移動したら参加予定の途中参加可能型イベントの会場に着いたかしらべる
+        .onChange(of: arrivingKey) {
+            if let here = locationManager.userLocation {
+                eventStore.arriveIfNear(here)
+            }
+        }
+
         // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
                 let previous = gatheringEvent?.id
                 gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                //イベント開催時刻よりも前に会場にいた場合
+                if let here = locationManager.userLocation{
+                    eventStore.arriveIfNear(here)
+                }
                 // 集合モードが始まった・終わったら地図を読み直す(終わったイベントを消すため)
                 if previous != gatheringEvent?.id {
                     await eventStore.reload()
@@ -234,6 +245,12 @@ struct EventMapView: View {
                 .background(.regularMaterial, in: Circle())
                 .shadow(radius: 3)
         }
+    }
+
+    //会場に着いたかを調べる用,10mごとに変化
+    private var arrivingKey: String{
+        guard let l = locationManager.userLocation else { return "none" }
+        return String(format: "%.4f,%.4f", l.latitude, l.longitude)
     }
 
     // 現在地をおよそ100m単位に丸めた目印。これが変わったら読み込み直す

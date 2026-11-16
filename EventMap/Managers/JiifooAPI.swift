@@ -275,6 +275,21 @@ enum JiifooAPI {
         return Set(rows.map(\.event_id))
     }
 
+    //ユーザーが参加済みのイベントID（イベント）一覧
+    static func myCheckedInEventIDs() async throws -> Set<UUID> {
+        nonisolated struct Row: Decodable, Sendable{ let event_id: UUID}
+        guard let userId = await currentUserID() else { return []}
+        let rows: [Row] = try await supabase
+            .from("participations")
+            .select("event_id")
+            .eq("user_id",value: userId)
+            .eq("status", value: "checked_in")
+            .execute()
+            .value
+        return Set(rows.map(\.event_id))
+    }
+
+
     // 参加を予約する(結果: ok / full / closed / already_reserved など)
     static func reserve(eventId: UUID) async throws -> String {
         try await supabase

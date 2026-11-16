@@ -10,7 +10,8 @@ final class EventStore {
     var events: [Event] = []
     var joinedEventIDs: Set<Event.ID> = []   // 参加予定(自分が作成したものも含む)
     var myUserID: UUID?
-
+    var checkedInEventIDs: Set<Event.ID> = [] //参加済み（会場に到着済み）のイベント
+    @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
 
@@ -42,9 +43,11 @@ final class EventStore {
             myUserID = await JiifooAPI.currentUserID()
             async let pins = JiifooAPI.nearbyEvents(latitude: center.latitude, longitude: center.longitude)
             async let joined = JiifooAPI.myActiveEventIDs()
+            async let checkedIn = JiifooAPI.myCheckedInEventIDs()
             let serverEvents=try await pins.map(Event.init(pin: ))
             events=serverEvents + (Self.showSampleEvents ? sampleEvents :[])
             joinedEventIDs = try await joined
+            checkedInEventIDs = try await checkedIn
             await NotificationManager.syncGathering(with: joinedEvents)
         } catch {
             message = "イベントを読み込めませんでした"
@@ -62,6 +65,37 @@ final class EventStore {
 
     func isJoined(_ event: Event) -> Bool {
         joinedEventIDs.contains(event.id)
+    }
+
+    func isCheckedIn(_ event: Event) -> Bool {
+        checkedInEventIDs.contains(event.id)
+    }
+
+    //途中参加可能型：参加予定のイベントの会場(100m以内)に着いたら、自動的に参加済みにする
+    func arriveIfNear(_ here: CLLocationCoordinate2D) {
+        let now = Date()
+        let hereLocation = CLLocation(latitude: here.latitude, longitude: here.longitude)
+        for event in events {
+                //途中参加可能型で、イベント開催期間で参加予定かつ未参加の状態のみ
+            guard event.joinType == .dropIn,
+                    isJoined(event),
+                    !isCheckedIn(event),
+                    !arrivingIDs.contains(event.id),
+                    event.startsAt <= now, now < event.endsAt else { continue }
+            //イベント開催地から100m以内か
+            let venue = CLLocation(latitude: event.latitude, longitude: event.longitude)
+            guard hereLocation.distance(from: venue) <= 100 else { continue }
+
+            arrivingIDs.insert(event.id)
+            Task{
+                let result = ( try? await JiifooAPI.checkIn(
+                    eventId: event.id, latitude: here.latitude, longitude: here.longitude)) ?? "error"
+                if result == "ok" || result == "already_checked_in" {
+                    checkedInEventIDs.insert(event.id)
+                }
+                arrivingIDs.remove(event.id)
+            }
+        }
     }
 
     func isMine(_ event: Event) -> Bool {

@@ -12,6 +12,7 @@ struct EventDetailView: View {
 
     private var isJoined: Bool { eventStore.isJoined(event) }
     private var isMine: Bool { eventStore.isMine(event) }
+    private var isCheckedIn: Bool { eventStore.isCheckedIn(event) }
 
     @State private var showEndDialog = false //終了の確認を出すか
 
@@ -100,7 +101,7 @@ struct EventDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(isJoined ? .green : .blue)
                     // 参加済みならキャンセルはいつでもできる。未参加なら範囲内のときだけ押せる
-                    .disabled(isMine || (!isJoined && (!isJoinable || event.isFull || conflictingEvent != nil)))
+                    .disabled(isMine || isCheckedIn || (!isJoined && (!isJoinable || event.isFull || conflictingEvent != nil)))
                 }
                 .padding()
                 .background(.bar)
@@ -145,6 +146,7 @@ struct EventDetailView: View {
 
     private var buttonTitle: String {
         if isMine { return "あなたが主催中" }
+        if isCheckedIn { return "参加済"}
         if isJoined { return "参加予定" }
         if event.isFull { return "満員です" }
         if conflictingEvent != nil { return "同じ時間帯に参加予定があります" }
@@ -153,6 +155,7 @@ struct EventDetailView: View {
 
     private var buttonIcon: String {
         if isMine { return "flame.fill" }
+        if isCheckedIn { return "checkmark.seal.fill"}
         if isJoined { return "checkmark.circle.fill" }
         if event.isFull { return "person.3.fill" }
         if conflictingEvent != nil { return "clock.badge.xmark" }
