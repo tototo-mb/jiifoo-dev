@@ -7,7 +7,9 @@ struct EventDetailView: View {
     @Environment(LocationManager.self) private var locationManager
     @State private var showCancelEventDialog = false //中止の確認を出す？
     private var canCancelEvent: Bool {isMine && event.startsAt > .now} // 自分が主催していて、まだ始まっていないときだけ中止できる
-    @State private var showCancelDialog = false 
+    @State private var showCancelDialog = false
+    @State private var showEditEvent = false //編集画面を出す？
+    private var canEdit: Bool { eventStore.canEdit(event) } // 自分が主催していて、集合モード開始前だけ編集できる
     
 
     private var isJoined: Bool { eventStore.isJoined(event) }
@@ -63,6 +65,11 @@ struct EventDetailView: View {
                         Text(outOfRangeMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    }
+                    if canEdit {
+                        Button("イベントを編集する") {
+                            showEditEvent = true
+                        }
                     }
                     if canCancelEvent {
                         Button("イベントを中止する", role: .destructive) {
@@ -129,6 +136,9 @@ struct EventDetailView: View {
                 }
             } message: {
                 Text("参加者の地図からも消えます")
+            }
+            .sheet(isPresented: $showEditEvent) {
+                EditEventView(event: event)
             }
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)

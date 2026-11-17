@@ -28,6 +28,7 @@ struct EventMapView: View {
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
+    @State private var showFilter = false               // フィルター画面を表示中か
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -76,7 +77,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFilter },
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -108,6 +109,13 @@ struct EventMapView: View {
                 .presentationDetents([.medium, .large])
         }
         
+        // フィルター画面
+        .sheet(isPresented: $showFilter) {
+            EventFilterView()
+                .environment(eventStore)
+                .presentationDetents([.medium])
+        }
+
         // 「+」でイベント作成画面を表示
         /*
         .sheet(isPresented: $showCreateEvent) {
@@ -169,7 +177,7 @@ struct EventMapView: View {
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
 
-                ForEach(eventStore.events) { event in
+                ForEach(eventStore.filteredEvents) { event in
                     Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
                         eventPin(for: event)
                     }
@@ -197,9 +205,17 @@ struct EventMapView: View {
         }
     }
 
-    // 右下のボタン（再読み込み・イベント作成・現在地）
+    // 右下のボタン（フィルター・再読み込み・イベント作成・現在地）
     private var controlButtons: some View {
         VStack(spacing: 12) {
+            // フィルターボタン
+            // 絞り込み中は塗りつぶしのアイコンにする
+            circleButton(systemName: eventStore.filter.isActive
+                         ? "line.3.horizontal.decrease.circle.fill"
+                         : "line.3.horizontal.decrease") {
+                showFilter = true
+            }
+
             // 再読み込みボタン
             circleButton(systemName: "arrow.clockwise") {
                 if let userLocation = locationManager.userLocation {
