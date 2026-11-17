@@ -14,7 +14,7 @@ final class EventStore {
     @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
-
+    var focusedEvent: Event?
 
     
     //完成までサンプルデータ表示

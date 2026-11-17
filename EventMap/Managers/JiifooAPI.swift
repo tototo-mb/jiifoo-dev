@@ -158,6 +158,13 @@ nonisolated struct GatheringMember: Codable, Identifiable, Sendable {
         case checkedIn = "checked_in"
     }
 }
+
+//遠くのイベントを探す時に送る値（radius_mがnilなら800mよりも外の法人イベントも表示）
+nonisolated struct SearchEventsParams: Encodable, Sendable {
+    let lat: Double
+    let lng: Double
+    let radius_m: Double?
+}
  
 // ② check_in に送る値
 nonisolated struct CheckInParams: Encodable, Sendable {
@@ -256,6 +263,12 @@ enum JiifooAPI {
             .value
     }
 
+    static func searchEvents(latitude: Double, longitude: Double, radiusM: Double?) async throws -> [EventPin] {
+        try await supabase
+            .rpc("search_events",params: SearchEventsParams(lat: latitude, lng: longitude, radius_m:radiusM))
+            .execute()
+            .value
+}
     // ログイン中のユーザーID(ログインしていなければ nil)
     static func currentUserID() async -> UUID? {
         try? await supabase.auth.session.user.id

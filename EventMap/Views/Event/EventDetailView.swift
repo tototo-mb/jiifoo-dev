@@ -8,7 +8,8 @@ struct EventDetailView: View {
     @State private var showCancelEventDialog = false //中止の確認を出す？
     private var canCancelEvent: Bool {isMine && event.startsAt > .now} // 自分が主催していて、まだ始まっていないときだけ中止できる
     @State private var showCancelDialog = false 
-    
+    var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
+    @Environment(\.dismiss) private var dismiss
 
     private var isJoined: Bool { eventStore.isJoined(event) }
     private var isMine: Bool { eventStore.isMine(event) }
@@ -22,7 +23,11 @@ struct EventDetailView: View {
     }
 
     private var distance: Double? { locationManager.distance(to: event.coordinate) }
-    private var isJoinable: Bool { locationManager.isJoinable(event.coordinate) }
+    //法人の途中参加可能型イベントはどれだけ遠くても参加ボタンを押せる（予定）
+    private var isJoinable: Bool {
+        event.kind == "corporate" || locationManager.isJoinable(event.coordinate)
+    }
+
     // 同じ時間帯に参加予定のイベント(あれば参加できない)
     private var conflictingEvent: Event? { eventStore.conflictingEvent(for: event) }
 
@@ -47,6 +52,14 @@ struct EventDetailView: View {
                     LabeledContent("場所", value: event.placeName)
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
+                    }
+                    if showMapButton {
+                        Button {
+                            eventStore.focusedEvent = event
+                            dismiss()
+                        } label: {
+                            Label("マップで場所を見る",systemImage: "map")
+                        }
                     }
                 }
                 if !event.description.isEmpty {

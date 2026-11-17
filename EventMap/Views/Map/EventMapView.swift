@@ -19,6 +19,7 @@ struct EventMapView: View {
     @State private var hasCenteredOnce = false           // 起動後、最初に現在地へ合わせたか
     @State private var selectedEventID: Event.ID?
     @State private var showCreateEvent = false
+    @State private var showFarEvents = false //各地のイベントの一覧を出すか
     @State private var lastCamera: MapCamera?
     @State private var cameraTask: Task<Void, Never>?   // 実行中のカメラの動き
     @State private var isReturningHome = false          // 現在地へ戻っている最中
@@ -76,7 +77,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents },
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -99,7 +100,7 @@ struct EventMapView: View {
         }
         // ピンが選択されたら詳細シートを表示
         .sheet(item: Binding(
-            get: { eventStore.events.first { $0.id == selectedEventID } },
+            get: { mapEvents.first { $0.id == selectedEventID } },
             set: { if $0 == nil { selectedEventID = nil } }   // 閉じたら選択解除
         )) { event in
             EventDetailView(event: event)
@@ -124,6 +125,19 @@ struct EventMapView: View {
             if let here = locationManager.userLocation {
                 eventStore.arriveIfNear(here)
             }
+        }
+
+        .onChange(of: eventStore.focusedEvent?.id) {
+            if let event = eventStore.focusedEvent {
+                showFarEvents = false 
+                moveToFocusedEvent(event)
+            }
+        }
+        
+        .sheet(isPresented: $showFarEvents) {
+            FarEventsView()
+            .environment(eventStore)
+            .environment(locationManager)
         }
 
         // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
@@ -168,6 +182,15 @@ struct EventMapView: View {
 
     // MARK: - 画面の部品
 
+    //地図に表示するイベント（読み込んだイベントかつ「マップ上で場所を見る」ボタンを押したイベント）
+    private var mapEvents: [Event] {
+        guard let focused = eventStore.focusedEvent,
+            !eventStore.events.contains(where: {$0.id == focused.id }) else {
+                return eventStore.events
+            }
+            return eventStore.events + [focused]
+    }
+
     // 地図
     //地図のボタン
     private var mapLayer: some View {
@@ -180,7 +203,7 @@ struct EventMapView: View {
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
 
-                ForEach(eventStore.events) { event in
+                ForEach(mapEvents) { event in
                     Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
                         eventPin(for: event)
                     }
@@ -225,10 +248,18 @@ struct EventMapView: View {
             }
             .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
             */
+
+            //各地のイベントをマップで読み込み
+            circleButton(systemName: "globe.asia.australia") {
+                showFarEvents = true
+            }
+
+            
             
             // 現在地ボタン
             circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
                 backTo2D()
+                eventStore.focusedEvent = nil //「地図で場所を見る」のイベントは消す
             }
         }
         .padding(.trailing, 16)
@@ -421,6 +452,20 @@ struct EventMapView: View {
                 isFollowing = true
                 followUser()
             }
+        }
+    }
+
+    //「地図で場所を見る」ボタンを押したイベントの場所へ移動する
+    private func moveToFocusedEvent(_ event: Event) {
+        cameraTask?.cancel()
+        savedCamera = nil
+        isFollowing = false
+        isReturningHome = false
+        withAnimation(.easeInOut(duration: 1.5)) {
+            cameraPosition = .camera(MapCamera(centerCoordinate: event.coordinate,
+                                                distance: 1500,
+                                                heading: 0,
+                                                pitch: 0))
         }
     }
 

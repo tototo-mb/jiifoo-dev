@@ -3,6 +3,7 @@ import SwiftUI
 // タブ関係
 struct MainTabView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(EventStore.self) private var eventStore
     @State private var selectedTab = 0
 
     //アプリが戻ったら読み直しして法人審査状況を反映させる
@@ -50,6 +51,11 @@ struct MainTabView: View {
         }
         .onChange(of: NotificationDelegate.shared.tappedEventID){_, eventID in
             if eventID != nil{
+                selectedTab = 0
+            }
+        }
+        .onChange(of: eventStore.focusedEvent?.id) {_, id in
+            if id != nil {
                 selectedTab = 0
             }
         }
