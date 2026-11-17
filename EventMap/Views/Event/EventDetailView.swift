@@ -8,10 +8,15 @@ struct EventDetailView: View {
     @State private var showCancelEventDialog = false //中止の確認を出す？
     private var canCancelEvent: Bool {isMine && event.startsAt > .now} // 自分が主催していて、まだ始まっていないときだけ中止できる
     @State private var showCancelDialog = false 
+    var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
+    @Environment(\.dismiss) private var dismiss
+    @State private var showEditEvent = false //編集画面を出す？
+    private var canEdit: Bool { eventStore.canEdit(event) } // 自分が主催していて、集合モード開始前だけ編集できる
     
 
     private var isJoined: Bool { eventStore.isJoined(event) }
     private var isMine: Bool { eventStore.isMine(event) }
+    private var isCheckedIn: Bool { eventStore.isCheckedIn(event) }
 
     @State private var showEndDialog = false //終了の確認を出すか
 
@@ -21,7 +26,11 @@ struct EventDetailView: View {
     }
 
     private var distance: Double? { locationManager.distance(to: event.coordinate) }
-    private var isJoinable: Bool { locationManager.isJoinable(event.coordinate) }
+    //法人の途中参加可能型イベントはどれだけ遠くても参加ボタンを押せる（予定）
+    private var isJoinable: Bool {
+        event.kind == "corporate" || locationManager.isJoinable(event.coordinate)
+    }
+
     // 同じ時間帯に参加予定のイベント(あれば参加できない)
     private var conflictingEvent: Event? { eventStore.conflictingEvent(for: event) }
 
@@ -47,6 +56,14 @@ struct EventDetailView: View {
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
                     }
+                    if showMapButton {
+                        Button {
+                            eventStore.focusedEvent = event
+                            dismiss()
+                        } label: {
+                            Label("マップで場所を見る",systemImage: "map")
+                        }
+                    }
                 }
                 if !event.description.isEmpty {
                     Section("詳細") {
@@ -63,6 +80,11 @@ struct EventDetailView: View {
                         Text(outOfRangeMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    }
+                    if canEdit {
+                        Button("イベントを編集する") {
+                            showEditEvent = true
+                        }
                     }
                     if canCancelEvent {
                         Button("イベントを中止する", role: .destructive) {
@@ -100,7 +122,7 @@ struct EventDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(isJoined ? .green : .blue)
                     // 参加済みならキャンセルはいつでもできる。未参加なら範囲内のときだけ押せる
-                    .disabled(isMine || (!isJoined && (!isJoinable || event.isFull || conflictingEvent != nil)))
+                    .disabled(isMine || isCheckedIn || (!isJoined && (!isJoinable || event.isFull || conflictingEvent != nil)))
                 }
                 .padding()
                 .background(.bar)
@@ -130,6 +152,9 @@ struct EventDetailView: View {
             } message: {
                 Text("参加者の地図からも消えます")
             }
+            .sheet(isPresented: $showEditEvent) {
+                EditEventView(event: event)
+            }
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)
             .alert(eventStore.message ?? "", isPresented: Binding(
@@ -145,6 +170,7 @@ struct EventDetailView: View {
 
     private var buttonTitle: String {
         if isMine { return "あなたが主催中" }
+        if isCheckedIn { return "参加済"}
         if isJoined { return "参加予定" }
         if event.isFull { return "満員です" }
         if conflictingEvent != nil { return "同じ時間帯に参加予定があります" }
@@ -153,6 +179,7 @@ struct EventDetailView: View {
 
     private var buttonIcon: String {
         if isMine { return "flame.fill" }
+        if isCheckedIn { return "checkmark.seal.fill"}
         if isJoined { return "checkmark.circle.fill" }
         if event.isFull { return "person.3.fill" }
         if conflictingEvent != nil { return "clock.badge.xmark" }

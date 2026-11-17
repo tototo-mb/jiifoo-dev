@@ -10,9 +10,19 @@ final class EventStore {
     var events: [Event] = []
     var joinedEventIDs: Set<Event.ID> = []   // 参加予定(自分が作成したものも含む)
     var myUserID: UUID?
-
+    var checkedInEventIDs: Set<Event.ID> = [] //参加済み（会場に到着済み）のイベント
+    @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
+    var focusedEvent: Event?
+    var filter = EventFilter()                // 地図の絞り込み条件
+    var cancelledNotices: [CancelledEvent] = [] // 参加していて中止されたイベント(お知らせ用)
+    var placeChangedNotices: [PlaceChangedEvent] = [] // 参加していて集合場所が変わったイベント(お知らせ用)
+
+    // 絞り込み条件に合うイベント（地図に表示する分）
+    var filteredEvents: [Event] {
+        events.filter(filter.matches)
+    }
 
 
     
@@ -42,9 +52,11 @@ final class EventStore {
             myUserID = await JiifooAPI.currentUserID()
             async let pins = JiifooAPI.nearbyEvents(latitude: center.latitude, longitude: center.longitude)
             async let joined = JiifooAPI.myActiveEventIDs()
+            async let checkedIn = JiifooAPI.myCheckedInEventIDs()
             let serverEvents=try await pins.map(Event.init(pin: ))
             events=serverEvents + (Self.showSampleEvents ? sampleEvents :[])
             joinedEventIDs = try await joined
+            checkedInEventIDs = try await checkedIn
             await NotificationManager.syncGathering(with: joinedEvents)
         } catch {
             message = "イベントを読み込めませんでした"
@@ -62,6 +74,37 @@ final class EventStore {
 
     func isJoined(_ event: Event) -> Bool {
         joinedEventIDs.contains(event.id)
+    }
+
+    func isCheckedIn(_ event: Event) -> Bool {
+        checkedInEventIDs.contains(event.id)
+    }
+
+    //途中参加可能型：参加予定のイベントの会場(100m以内)に着いたら、自動的に参加済みにする
+    func arriveIfNear(_ here: CLLocationCoordinate2D) {
+        let now = Date()
+        let hereLocation = CLLocation(latitude: here.latitude, longitude: here.longitude)
+        for event in events {
+                //途中参加可能型で、イベント開催期間で参加予定かつ未参加の状態のみ
+            guard event.joinType == .dropIn,
+                    isJoined(event),
+                    !isCheckedIn(event),
+                    !arrivingIDs.contains(event.id),
+                    event.startsAt <= now, now < event.endsAt else { continue }
+            //イベント開催地から100m以内か
+            let venue = CLLocation(latitude: event.latitude, longitude: event.longitude)
+            guard hereLocation.distance(from: venue) <= 100 else { continue }
+
+            arrivingIDs.insert(event.id)
+            Task{
+                let result = ( try? await JiifooAPI.checkIn(
+                    eventId: event.id, latitude: here.latitude, longitude: here.longitude)) ?? "error"
+                if result == "ok" || result == "already_checked_in" {
+                    checkedInEventIDs.insert(event.id)
+                }
+                arrivingIDs.remove(event.id)
+            }
+        }
     }
 
     func isMine(_ event: Event) -> Bool {
@@ -158,6 +201,124 @@ final class EventStore {
         }
     }
 
+    // MARK: - 参加者へのお知らせ(中止・集合場所の変更)
+
+    // お知らせがあるか(MainTabView のアラート表示に使う)
+    var hasNotices: Bool {
+        !cancelledNotices.isEmpty || !placeChangedNotices.isEmpty
+    }
+
+    // 参加していたイベントが中止・場所変更されていないか確認する(アプリを開いたときに呼ぶ)
+    // 中止のときの予約の取り消しは Supabase の cancel_event が済ませているので、ここでは知らせるだけ
+    func checkNotices() async {
+        async let cancelled = try? JiifooAPI.myCancelledEvents()
+        async let changed = try? JiifooAPI.myPlaceChangedEvents()
+        let cancelledList = await cancelled ?? []
+        let changedList = await changed ?? []
+
+        for event in cancelledList {
+            joinedEventIDs.remove(event.id)
+            NotificationManager.cancelGathering(eventID: event.id)  // このiPhoneの集合通知も消す
+        }
+        if !cancelledList.isEmpty { cancelledNotices = cancelledList }
+        if !changedList.isEmpty {
+            placeChangedNotices = changedList
+            await reload()   // 地図と集合通知を新しい場所に合わせる
+        }
+    }
+
+    // お知らせを閉じたとき：知らせ済みにして、次から出さない
+    func acknowledgeNotices() {
+        let cancelledIDs = cancelledNotices.map(\.id)
+        let changedIDs = placeChangedNotices.map(\.id)
+        cancelledNotices = []
+        placeChangedNotices = []
+        Task {
+            do {
+                if !cancelledIDs.isEmpty { try await JiifooAPI.markCancelNotified(eventIds: cancelledIDs) }
+                if !changedIDs.isEmpty { try await JiifooAPI.markPlaceChangeSeen(eventIds: changedIDs) }
+            } catch {
+                print("お知らせを既読にできませんでした:", error)  // 次に開いたときにもう一度出る
+            }
+        }
+    }
+
+    // アラートのタイトル
+    var noticeTitle: String {
+        switch (cancelledNotices.isEmpty, placeChangedNotices.isEmpty) {
+        case (false, true): return "イベントが中止されました"
+        case (true, false): return "集合場所が変更されました"
+        default:            return "参加予定のイベントのお知らせ"
+        }
+    }
+
+    // アラートの本文
+    var noticeMessage: String {
+        var lines: [String] = []
+        if !cancelledNotices.isEmpty {
+            let titles = cancelledNotices.map { "「\($0.title)」" }.joined(separator: "\n")
+            lines.append("\(titles)\nは主催者により中止されました。参加は取り消されています。")
+        }
+        for event in placeChangedNotices {
+            lines.append("「\(event.title)」の集合場所が「\(event.placeName)」に変更されました。")
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    // MARK: - イベント編集(主催者用)
+
+    // 編集できるか(自分が主催していて、集合モードが始まる＝開始5分前より前)
+    // ※最終的な判定は Supabase の update_event が行う
+    func canEdit(_ event: Event) -> Bool {
+        isMine(event) && Date.now < event.startsAt.addingTimeInterval(-5 * 60)
+    }
+
+    // イベントを編集する。成功なら nil、失敗ならエラーの文章を返す
+    func update(
+        _ event: Event,
+        title: String,
+        description: String,
+        placeName: String,
+        coordinate: CLLocationCoordinate2D
+    ) async -> String? {
+        do {
+            let result = try await JiifooAPI.updateEvent(
+                eventId: event.id,
+                title: title,
+                description: description,
+                placeName: placeName,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+            switch result {
+            case "ok":
+                // 自分の集合通知も新しい名前・場所で予約し直す
+                if event.joinType == .fixed {
+                    NotificationManager.cancelGathering(eventID: event.id)
+                    await NotificationManager.scheduleGathering(id: event.id,
+                                                               title: title,
+                                                               placeName: placeName,
+                                                               startsAt: event.startsAt)
+                }
+                await reload()
+                return nil
+            case "too_late":
+                return "集合モードが始まったため編集できません"
+            case "not_editable":
+                return "募集中のイベントだけ編集できます"
+            case "not_allowed":
+                return "イベント主催者だけが編集できます"
+            case "invalid":
+                return "イベント名と集合場所を正しく入力してください"
+            default:
+                return "編集できませんでした(\(result))"
+            }
+        } catch {
+            print("イベント編集に失敗:", error)
+            return "通信エラーで編集できませんでした"
+        }
+    }
+
     //イベント終了(途中参加可能型の主催者用)
     func end(_ event: Event){
         Task{
@@ -237,6 +398,8 @@ final class EventStore {
         joinedEventIDs = []
         myUserID = nil
         message = nil
+        cancelledNotices = []
+        placeChangedNotices = []
         lastLoadedCenter = nil
         //ログアウトしたとき、予約していた通知を全部消す
         NotificationManager.cancelAll()

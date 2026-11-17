@@ -19,6 +19,7 @@ struct EventMapView: View {
     @State private var hasCenteredOnce = false           // 起動後、最初に現在地へ合わせたか
     @State private var selectedEventID: Event.ID?
     @State private var showCreateEvent = false
+    @State private var showFarEvents = false //各地のイベントの一覧を出すか
     @State private var lastCamera: MapCamera?
     @State private var cameraTask: Task<Void, Never>?   // 実行中のカメラの動き
     @State private var isReturningHome = false          // 現在地へ戻っている最中
@@ -28,6 +29,7 @@ struct EventMapView: View {
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
+    @State private var showFilter = false               // フィルター画面を表示中か
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -76,7 +78,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter},
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -99,7 +101,7 @@ struct EventMapView: View {
         }
         // ピンが選択されたら詳細シートを表示
         .sheet(item: Binding(
-            get: { eventStore.events.first { $0.id == selectedEventID } },
+            get: { mapEvents.first { $0.id == selectedEventID } },
             set: { if $0 == nil { selectedEventID = nil } }   // 閉じたら選択解除
         )) { event in
             EventDetailView(event: event)
@@ -108,6 +110,13 @@ struct EventMapView: View {
                 .presentationDetents([.medium, .large])
         }
         
+        // フィルター画面
+        .sheet(isPresented: $showFilter) {
+            EventFilterView()
+                .environment(eventStore)
+                .presentationDetents([.medium])
+        }
+
         // 「+」でイベント作成画面を表示
         /*
         .sheet(isPresented: $showCreateEvent) {
@@ -119,11 +128,35 @@ struct EventMapView: View {
         }
         */
 
+        //ユーザーが移動したら参加予定の途中参加可能型イベントの会場に着いたかしらべる
+        .onChange(of: arrivingKey) {
+            if let here = locationManager.userLocation {
+                eventStore.arriveIfNear(here)
+            }
+        }
+
+        .onChange(of: eventStore.focusedEvent?.id) {
+            if let event = eventStore.focusedEvent {
+                showFarEvents = false 
+                moveToFocusedEvent(event)
+            }
+        }
+        
+        .sheet(isPresented: $showFarEvents) {
+            FarEventsView()
+            .environment(eventStore)
+            .environment(locationManager)
+        }
+
         // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
                 let previous = gatheringEvent?.id
                 gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                //イベント開催時刻よりも前に会場にいた場合
+                if let here = locationManager.userLocation{
+                    eventStore.arriveIfNear(here)
+                }
                 // 集合モードが始まった・終わったら地図を読み直す(終わったイベントを消すため)
                 if previous != gatheringEvent?.id {
                     await eventStore.reload()
@@ -157,6 +190,16 @@ struct EventMapView: View {
 
     // MARK: - 画面の部品
 
+    //地図に表示するイベント（読み込んだイベントかつ「マップ上で場所を見る」ボタンを押したイベント）
+    private var mapEvents: [Event] {
+        let shown = eventStore.filteredEvents //絞り込みに合致するイベント
+        guard let focused = eventStore.focusedEvent,
+            !shown.contains(where: {$0.id == focused.id }) else {
+                return shown
+        }
+        return shown + [focused]
+    }
+
     // 地図
     //地図のボタン
     private var mapLayer: some View {
@@ -169,7 +212,7 @@ struct EventMapView: View {
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
 
-                ForEach(eventStore.events) { event in
+                ForEach(mapEvents) { event in
                     Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
                         eventPin(for: event)
                     }
@@ -197,9 +240,17 @@ struct EventMapView: View {
         }
     }
 
-    // 右下のボタン（再読み込み・イベント作成・現在地）
+    // 右下のボタン（フィルター・再読み込み・イベント作成・現在地）
     private var controlButtons: some View {
         VStack(spacing: 12) {
+            // フィルターボタン
+            // 絞り込み中は塗りつぶしのアイコンにする
+            circleButton(systemName: eventStore.filter.isActive
+                         ? "line.3.horizontal.decrease.circle.fill"
+                         : "line.3.horizontal.decrease") {
+                showFilter = true
+            }
+
             // 再読み込みボタン
             circleButton(systemName: "arrow.clockwise") {
                 if let userLocation = locationManager.userLocation {
@@ -214,10 +265,18 @@ struct EventMapView: View {
             }
             .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
             */
+
+            //各地のイベントをマップで読み込み
+            circleButton(systemName: "globe.asia.australia") {
+                showFarEvents = true
+            }
+
+            
             
             // 現在地ボタン
             circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
                 backTo2D()
+                eventStore.focusedEvent = nil //「地図で場所を見る」のイベントは消す
             }
         }
         .padding(.trailing, 16)
@@ -234,6 +293,12 @@ struct EventMapView: View {
                 .background(.regularMaterial, in: Circle())
                 .shadow(radius: 3)
         }
+    }
+
+    //会場に着いたかを調べる用,10mごとに変化
+    private var arrivingKey: String{
+        guard let l = locationManager.userLocation else { return "none" }
+        return String(format: "%.4f,%.4f", l.latitude, l.longitude)
     }
 
     // 現在地をおよそ100m単位に丸めた目印。これが変わったら読み込み直す
@@ -404,6 +469,20 @@ struct EventMapView: View {
                 isFollowing = true
                 followUser()
             }
+        }
+    }
+
+    //「地図で場所を見る」ボタンを押したイベントの場所へ移動する
+    private func moveToFocusedEvent(_ event: Event) {
+        cameraTask?.cancel()
+        savedCamera = nil
+        isFollowing = false
+        isReturningHome = false
+        withAnimation(.easeInOut(duration: 1.5)) {
+            cameraPosition = .camera(MapCamera(centerCoordinate: event.coordinate,
+                                                distance: 1500,
+                                                heading: 0,
+                                                pitch: 0))
         }
     }
 
