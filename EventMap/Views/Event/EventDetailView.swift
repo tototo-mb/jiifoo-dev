@@ -10,6 +10,9 @@ struct EventDetailView: View {
     @State private var showCancelDialog = false 
     var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
     @Environment(\.dismiss) private var dismiss
+    @State private var showEditEvent = false //編集画面を出す？
+    private var canEdit: Bool { eventStore.canEdit(event) } // 自分が主催していて、集合モード開始前だけ編集できる
+    
 
     private var isJoined: Bool { eventStore.isJoined(event) }
     private var isMine: Bool { eventStore.isMine(event) }
@@ -78,6 +81,11 @@ struct EventDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    if canEdit {
+                        Button("イベントを編集する") {
+                            showEditEvent = true
+                        }
+                    }
                     if canCancelEvent {
                         Button("イベントを中止する", role: .destructive) {
                             showCancelEventDialog = true
@@ -143,6 +151,9 @@ struct EventDetailView: View {
                 }
             } message: {
                 Text("参加者の地図からも消えます")
+            }
+            .sheet(isPresented: $showEditEvent) {
+                EditEventView(event: event)
             }
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)

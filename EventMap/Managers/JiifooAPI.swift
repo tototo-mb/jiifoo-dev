@@ -71,7 +71,35 @@ nonisolated struct MyOrganization: Codable,Identifiable,Hashable,Sendable{
 }
 
 
+// 参加していて主催者に中止されたイベント(my_cancelled_events の結果)
+nonisolated struct CancelledEvent: Codable, Identifiable, Sendable {
+    let id: UUID
+    let title: String
+    let placeName: String
+    let startsAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case placeName = "place_name"
+        case startsAt = "starts_at"
+    }
+}
+
+// 参加していて集合場所が変わったイベント(my_place_changed_events の結果)
+// 形は中止のお知らせと同じなので CancelledEvent と同じ型を使う
+typealias PlaceChangedEvent = CancelledEvent
+
 // MARK: - データの形(Supabase に送る)
+
+// イベント編集で送る内容(update_event)
+nonisolated struct UpdateEventParams: Encodable, Sendable {
+    let p_event_id: UUID
+    let p_title: String
+    let p_description: String
+    let p_place_name: String
+    let p_lat: Double
+    let p_lng: Double
+}
 
 nonisolated enum JoinType: String, CaseIterable,Codable,Sendable{
     case fixed = "fixed" //合コン型(集合時間厳守)
@@ -333,6 +361,58 @@ enum JiifooAPI {
             .value
     }
     
+    // 参加していて中止された(まだ知らせていない)イベント
+    static func myCancelledEvents() async throws -> [CancelledEvent] {
+        try await supabase
+            .rpc("my_cancelled_events")
+            .execute()
+            .value
+    }
+
+    // 中止を知らせ済みにする(次から出さない)
+    static func markCancelNotified(eventIds: [UUID]) async throws {
+        try await supabase
+            .rpc("mark_cancel_notified", params: ["p_event_ids": eventIds])
+            .execute()
+    }
+
+    // イベントを編集する(主催者用)。結果は "ok" / "too_late" / "not_editable" / "not_allowed" / "invalid" など
+    static func updateEvent(
+        eventId: UUID,
+        title: String,
+        description: String,
+        placeName: String,
+        latitude: Double,
+        longitude: Double
+    ) async throws -> String {
+        try await supabase
+            .rpc("update_event", params: UpdateEventParams(
+                p_event_id: eventId,
+                p_title: title,
+                p_description: description,
+                p_place_name: placeName,
+                p_lat: latitude,
+                p_lng: longitude
+            ))
+            .execute()
+            .value
+    }
+
+    // 参加していて集合場所が変わった(まだ知らせていない)イベント
+    static func myPlaceChangedEvents() async throws -> [PlaceChangedEvent] {
+        try await supabase
+            .rpc("my_place_changed_events")
+            .execute()
+            .value
+    }
+
+    // 場所変更のお知らせを見たことにする(次から出さない)
+    static func markPlaceChangeSeen(eventIds: [UUID]) async throws {
+        try await supabase
+            .rpc("mark_place_change_seen", params: ["p_event_ids": eventIds])
+            .execute()
+    }
+
     // 法人として投稿できる法人の一覧(所属していなければ空)
     static func myPostableOrganizations() async throws -> [Organization] {
         try await supabase

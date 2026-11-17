@@ -62,7 +62,21 @@ struct MainTabView: View {
         .onChange(of: scenePhase){_,phase in
             if phase == .active{
                 Task{ await authManager.reloadOrganizations() }
+                Task{ await eventStore.checkNotices() }
             }
+        }
+        // 起動したとき、参加していたイベントが中止・場所変更されていないか確認
+        .task {
+            await eventStore.checkNotices()
+        }
+        // 参加していたイベントの中止・集合場所変更のお知らせ
+        .alert(eventStore.noticeTitle, isPresented: Binding(
+            get: { eventStore.hasNotices },
+            set: { if !$0 { eventStore.acknowledgeNotices() } }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(eventStore.noticeMessage)
         }
     }
 }

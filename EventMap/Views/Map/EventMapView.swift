@@ -29,6 +29,7 @@ struct EventMapView: View {
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
+    @State private var showFilter = false               // フィルター画面を表示中か
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -77,7 +78,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents },
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter},
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -109,6 +110,13 @@ struct EventMapView: View {
                 .presentationDetents([.medium, .large])
         }
         
+        // フィルター画面
+        .sheet(isPresented: $showFilter) {
+            EventFilterView()
+                .environment(eventStore)
+                .presentationDetents([.medium])
+        }
+
         // 「+」でイベント作成画面を表示
         /*
         .sheet(isPresented: $showCreateEvent) {
@@ -184,11 +192,12 @@ struct EventMapView: View {
 
     //地図に表示するイベント（読み込んだイベントかつ「マップ上で場所を見る」ボタンを押したイベント）
     private var mapEvents: [Event] {
+        let shown = eventStore.filteredEvents //絞り込みに合致するイベント
         guard let focused = eventStore.focusedEvent,
-            !eventStore.events.contains(where: {$0.id == focused.id }) else {
-                return eventStore.events
-            }
-            return eventStore.events + [focused]
+            !shown.contains(where: {$0.id == focused.id }) else {
+                return shown
+        }
+        return shown + [focused]
     }
 
     // 地図
@@ -231,9 +240,17 @@ struct EventMapView: View {
         }
     }
 
-    // 右下のボタン（再読み込み・イベント作成・現在地）
+    // 右下のボタン（フィルター・再読み込み・イベント作成・現在地）
     private var controlButtons: some View {
         VStack(spacing: 12) {
+            // フィルターボタン
+            // 絞り込み中は塗りつぶしのアイコンにする
+            circleButton(systemName: eventStore.filter.isActive
+                         ? "line.3.horizontal.decrease.circle.fill"
+                         : "line.3.horizontal.decrease") {
+                showFilter = true
+            }
+
             // 再読み込みボタン
             circleButton(systemName: "arrow.clockwise") {
                 if let userLocation = locationManager.userLocation {
