@@ -21,11 +21,7 @@ struct ProfileView: View {
     @State private var selectedEvent: Event?
     @State private var showSettings=false
 
-    private var postedEvents: [Event] {[]}
-
-    private var gridEvents: [Event] {
-        selectedTab == .posted ? postedEvents : eventStore.joinedEvents
-    }
+    @State private var pastEvents: [PastEvent] = []   // 過去に参加・主催したイベント(Supabase から読み込む)
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
@@ -35,7 +31,7 @@ struct ProfileView: View {
                 VStack(spacing: 16) {
                     ProfileHeaderView(name: myName,
                                       bio: bio,
-                                      postedCount: postedEvents.count,
+                                      postedCount: pastEvents.count,
                                       joinedCount: eventStore.joinedEvents.count,
                                       followerCount: followerCount)
 
@@ -49,20 +45,40 @@ struct ProfileView: View {
                     .padding(.horizontal)
 
                     // 3列のグリッド
-                    if gridEvents.isEmpty {
-                        ContentUnavailableView(
-                            selectedTab == .posted ? "掲載したイベント" : "参加したイベントはありません",
-                            systemImage: "calendar.badge.exclamationmark")
-                            .padding(.top, 24)
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 2) {
-                            ForEach(gridEvents) { event in
-                                Button {
-                                    selectedEvent = event
-                                } label: {
-                                    EventGridTile(event: event)
+                    switch selectedTab {
+                    case .posted:
+                        // 過去のイベント(タップで写真が見られる詳細へ)
+                        if pastEvents.isEmpty {
+                            ContentUnavailableView(
+                                "過去に参加したイベントはありません",
+                                systemImage: "calendar.badge.exclamationmark")
+                                .padding(.top, 24)
+                        } else {
+                            LazyVGrid(columns: columns, spacing: 2) {
+                                ForEach(pastEvents) { event in
+                                    NavigationLink(value: event) {
+                                        PastEventGridTile(event: event)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
+                            }
+                        }
+                    case .joined:
+                        if eventStore.joinedEvents.isEmpty {
+                            ContentUnavailableView(
+                                "参加予定のイベントはありません",
+                                systemImage: "calendar.badge.exclamationmark")
+                                .padding(.top, 24)
+                        } else {
+                            LazyVGrid(columns: columns, spacing: 2) {
+                                ForEach(eventStore.joinedEvents) { event in
+                                    Button {
+                                        selectedEvent = event
+                                    } label: {
+                                        EventGridTile(event: event)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
@@ -71,6 +87,12 @@ struct ProfileView: View {
             }
             .navigationTitle(myName)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: PastEvent.self) { event in
+                PastEventDetailView(event: event)
+            }
+            // 表示するたびに過去のイベントを読み直す(引っ張って更新もできる)
+            .task { await loadPastEvents() }
+            .refreshable { await loadPastEvents() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button{
@@ -88,6 +110,45 @@ struct ProfileView: View {
                 .environment(eventStore)
                 .presentationDetents([.medium,.large])
         }
+    }
+}
+
+extension ProfileView {
+    private func loadPastEvents() async {
+        if let list = try? await JiifooAPI.myPastEvents() {
+            pastEvents = list
+        }
+    }
+}
+
+// 過去のイベントのグリッドの1マス
+struct PastEventGridTile: View {
+    let event: PastEvent
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Rectangle()
+                .fill((event.kind == "corporate" ? EventScale.businessMode : EventScale.privateMode).color.gradient)
+                .opacity(0.8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.caption.bold())
+                    .lineLimit(2)
+                Text(event.startsAt, format: .dateTime.month().day())
+                    .font(.caption2)
+            }
+            .foregroundStyle(.white)
+            .padding(6)
+        }
+        .overlay(alignment: .topTrailing) {
+            if event.isCreator {
+                Image(systemName: "flame.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(6)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)   // 正方形
     }
 }
 
