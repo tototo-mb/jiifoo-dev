@@ -89,6 +89,23 @@ nonisolated struct CancelledEvent: Codable, Identifiable, Sendable {
 // 形は中止のお知らせと同じなので CancelledEvent と同じ型を使う
 typealias PlaceChangedEvent = CancelledEvent
 
+// 過去のイベント(my_past_events の結果。マイページの「過去に参加したイベント」で使う)
+nonisolated struct PastEvent: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let title: String
+    let placeName: String
+    let startsAt: Date
+    let kind: String              // "normal" / "corporate"
+    let isCreator: Bool           // 自分が主催したか
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, kind
+        case placeName = "place_name"
+        case startsAt = "starts_at"
+        case isCreator = "is_creator"
+    }
+}
+
 // MARK: - データの形(Supabase に送る)
 
 // イベント編集で送る内容(update_event)
@@ -449,6 +466,14 @@ enum JiifooAPI {
     }
  
     // メンバーの名前と到着状況
+    // 終わったイベントのうち、自分が主催・参加したもの(新しい順)
+    static func myPastEvents() async throws -> [PastEvent] {
+        try await supabase
+            .rpc("my_past_events")
+            .execute()
+            .value
+    }
+
     static func eventMembers(eventId: UUID) async throws -> [GatheringMember] {
         try await supabase
             .rpc("event_members", params: ["p_event_id": eventId])

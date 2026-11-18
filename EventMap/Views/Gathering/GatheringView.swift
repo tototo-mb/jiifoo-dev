@@ -22,6 +22,12 @@ struct GatheringView: View {
     @State private var isEnded = false //集合モードが終わったか
     @State private var isCreator = false //自分が主催者か
     @State private var isEnding = false //終了の処理中か
+    @State private var myUserID: UUID?
+    @State private var showArrivalChoice = false //「写真を撮る/撮らない」の選択を出すか
+    @State private var showCamera = false
+    @State private var photoUserIDs: Set<UUID> = [] //到着時の写真を撮った人
+    @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
+    @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -38,6 +44,8 @@ struct GatheringView: View {
     private var isCheckedIn: Bool { myStatus == "checked_in" }
     private var arrivedCount: Int { members.filter(\.checkedIn).count }
     private var allArrived: Bool { !members.isEmpty && arrivedCount == members.count }
+    // 写真付きで到着できるのは法人イベントだけ(個人イベントは今まで通り)
+    private var canArriveWithPhoto: Bool { event.kind == "corporate" }
     //集合モードが終わる時刻（サーバーのends_atと同じ）                 
     private var endsAt: Date { event.endsAt}
 
@@ -88,6 +96,19 @@ struct GatheringView: View {
                                         .background(.orange, in: Capsule())
                                 }
                                 Spacer()
+                                // 主催者には、到着時に撮った写真を小さく表示(タップで大きく)
+                                if isCreator && photoUserIDs.contains(member.userId) {
+                                    Button {
+                                        viewingPhotoMember = member
+                                    } label: {
+                                        StoredPhotoView(
+                                            path: PhotoStorage.arrivalPath(eventID: event.id, userID: member.userId),
+                                            reloadID: photoReloadID)
+                                            .frame(width: 36, height: 36)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                                 Text(member.checkedIn ? "到着" : "移動中")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -150,7 +171,41 @@ struct GatheringView: View {
             }
             //自分が主催者か調べる
             .task{
-                isCreator = await JiifooAPI.currentUserID() == event.creatorId
+                myUserID = await JiifooAPI.currentUserID()
+                isCreator = myUserID == event.creatorId
+                if isCreator { await loadMembers() } // 主催者なら写真の一覧もすぐ読み込む
+            }
+            //到着するとき、写真を撮るか選ぶ(法人イベントのみ)
+            .confirmationDialog("到着を記録します",
+                                isPresented: $showArrivalChoice,
+                                titleVisibility: .visible) {
+                Button("写真を撮って到着する") { showCamera = true }
+                Button("写真なしで到着する") { checkIn() }
+            } message: {
+                Text("写真は主催者と参加者だけが見られます")
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    arriveWithPhoto(image)
+                }
+                .ignoresSafeArea()
+            }
+            //メンバーの到着写真を大きく表示
+            .sheet(item: $viewingPhotoMember) { member in
+                NavigationStack {
+                    StoredPhotoView(
+                        path: PhotoStorage.arrivalPath(eventID: event.id, userID: member.userId),
+                        reloadID: photoReloadID,
+                        contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .navigationTitle(member.displayName)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("閉じる") { viewingPhotoMember = nil }
+                            }
+                        }
+                }
             }
             //
             .task{
@@ -191,7 +246,12 @@ struct GatheringView: View {
                     .foregroundStyle(.secondary)
             }
             Button {
-                checkIn()
+                // 法人イベントは「写真を撮る/撮らない」を選んでから到着する
+                if canArriveWithPhoto {
+                    showArrivalChoice = true
+                } else {
+                    checkIn()
+                }
             } label: {
                 Label(isCheckedIn ? "到着済み" : "到着しました",
                       systemImage: isCheckedIn ? "checkmark.circle.fill" : "mappin.and.ellipse")
@@ -221,6 +281,30 @@ struct GatheringView: View {
     private func loadMembers() async {
         if let list = try? await JiifooAPI.eventMembers(eventId: event.id) {
             members = list
+        }
+        // 主催者は、誰が写真を撮ったかも読み込む
+        if isCreator && canArriveWithPhoto,
+           let ids = try? await PhotoStorage.arrivalPhotoUserIDs(eventID: event.id) {
+            photoUserIDs = ids
+        }
+    }
+
+    // 写真を保存してから到着を記録する
+    private func arriveWithPhoto(_ image: UIImage) {
+        guard let myUserID else { return }
+        isCheckingIn = true
+        Task {
+            do {
+                try await PhotoStorage.upload(
+                    image, to: PhotoStorage.arrivalPath(eventID: event.id, userID: myUserID))
+                photoReloadID = UUID()
+                isCheckingIn = false
+                checkIn()   // 写真の保存に成功したら到着を記録
+            } catch {
+                isCheckingIn = false
+                message = "写真を保存できませんでした。もう一度試すか、写真なしで到着してください"
+                print("到着写真の保存に失敗:", error)
+            }
         }
     }
 

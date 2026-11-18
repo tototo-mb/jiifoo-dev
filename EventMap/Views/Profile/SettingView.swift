@@ -79,6 +79,15 @@ struct SettingsView: View {
                     Link("プライバシーポリシー", destination: URL(string: "https://jiifoo.com/privacy")!)
                 }
 
+                // ---- 開発用(写真機能を集合モードに組み込んだら消す) ----
+                Section("開発用") {
+                    NavigationLink {
+                        PhotoTestView()
+                    } label: {
+                        Label("写真のテスト", systemImage: "camera")
+                    }
+                }
+
                 // ---- ログアウト ----
                 Section {
                     Button("ログアウト", role: .destructive) {
