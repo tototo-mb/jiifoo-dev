@@ -143,7 +143,7 @@ struct EventMapView: View {
         }
         
         .sheet(isPresented: $showFarEvents) {
-            FarEventsView()
+            FarEventsView(startCamera: farEventsStartCamera)
             .environment(eventStore)
             .environment(locationManager)
         }
@@ -189,6 +189,15 @@ struct EventMapView: View {
 }
 
     // MARK: - 画面の部品
+
+    //イベント一覧表示機能用のカメラ
+    private var farEventsStartCamera: MapCamera? {
+        guard let here = locationManager.userLocation else { return nil }
+        return MapCamera(centerCoordinate: here,
+        distance: lastCamera?.distance ?? Self.homeDistance,
+        heading: 0,
+        pitch: 0)
+    }
 
     //地図に表示するイベント（読み込んだイベントかつ「マップ上で場所を見る」ボタンを押したイベント）
     private var mapEvents: [Event] {
@@ -491,25 +500,18 @@ struct EventMapView: View {
         cameraTask?.cancel()
         savedCamera = nil      // 詳細を閉じたときの「元に戻る」は使わない
         selectedEventID = nil
-        isReturningHome = true // 押した瞬間にアイコンを青く
         followDistance = Self.homeDistance   // 毎回同じ縮尺で追従する
 
-        cameraTask = Task { @MainActor in
-            if let userLocation = locationManager.userLocation {
-                withAnimation(.easeInOut(duration: 1.0)) {
-                    cameraPosition = .camera(MapCamera(centerCoordinate: userLocation,
-                                                       distance: Self.homeDistance,
-                                                       heading: 0,
-                                                       pitch: 0))
-                }
-                try? await Task.sleep(for: .seconds(1.0))
-                guard !Task.isCancelled else { return }
-            }
-            // ここで .userLocation に切り替えない（切り替えると縮尺が勝手に戻ってしまう）
-            isReturningHome = false
-            isFollowing = true
-            hasCenteredOnce = true
-        }
+        if let userLocation = locationManager.userLocation {
+            cameraPosition = .camera(MapCamera(centerCoordinate: userLocation,
+                                                distance: Self.homeDistance,
+                                                heading: 0,
+                                                pitch: 0))
+        } 
+        // ここで .userLocation に切り替えない（切り替えると縮尺が勝手に戻ってしまう）
+        isReturningHome = false
+        isFollowing = true
+        hasCenteredOnce = true
     }
 }
 
