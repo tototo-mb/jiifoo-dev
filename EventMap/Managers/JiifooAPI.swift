@@ -106,7 +106,28 @@ nonisolated struct PastEvent: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-// MARK: - データの形(Supabase に送る)
+// MARK: データの形(Supabase に送る)
+
+//思い出の写真１枚分（my_event_photosの結果　ユーザーページで自分が参加したイベントを振り返るため使用）
+nonisolated struct MemoryPhoto: Codable,Identifiable, Hashable, Sendable {
+    let path: String //保存場所の名前
+    let createdAt: Date //撮影日時
+    let eventId: UUID
+    let eventTitle: String
+    let placeName: String
+    let startsAt: Date
+
+    var id: String { path }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case createdAt = "created_at"
+        case eventId = "event_id" 
+        case eventTitle = "event_title"
+        case placeName = "place_name"
+        case startsAt = "starts_at" 
+    }
+}
 
 // イベント編集で送る内容(update_event)
 nonisolated struct UpdateEventParams: Encodable, Sendable {
@@ -161,6 +182,7 @@ nonisolated struct NewEvent: Encodable, Sendable {
 nonisolated struct CreatedEvent: Decodable, Sendable {
     let id: UUID
 }
+
 //MARK: - 集合モード
 // ① データの形(Supabase から受け取る)
  
@@ -480,7 +502,46 @@ enum JiifooAPI {
             .execute()
             .value
     }
- 
+    
+    //MARK:思い出の写真
+
+    //撮影枠を取る（保存作の名前、もしくは"not/_member" , "limit_reaced" などが返る）
+    static func reservePhotoSlot(eventId: UUID) async throws -> String {
+        try await supabase
+            .rpc("reserve_photo_slot", params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
+
+    //写真の記録を消す
+    static func deleteEventPhoto(path: String) async throws -> String {
+        try await supabase
+            .rpc("delete_event_photo", params:["p_path": path])
+            .execute()
+            .value
+    }
+
+    //自分の思い出の写真
+    static func myMemoryPhotos() async throws -> [MemoryPhoto] {
+        try await supabase
+            .rpc("my_event_photos")
+            .execute()
+            .value
+    }
+
+    //参加したイベントで自分が撮影した写真の保存場所
+    static func myPhotoPaths(eventId: UUID) async throws -> [String] {
+        nonisolated struct Row:  Decodable, Sendable { let path: String }
+        let rows: [Row] = try await supabase 
+            .from("event_photos")
+            .select("path")
+            .eq("event_id",value: eventId)
+            .order("created_at")
+            .execute()
+            .value
+        return rows.map(\.path)
+    }
+
     // 到着チェックイン("ok" / "too_far" / "not_gathering" などが返る)
     static func checkIn(eventId: UUID, latitude: Double, longitude: Double) async throws -> String {
         try await supabase

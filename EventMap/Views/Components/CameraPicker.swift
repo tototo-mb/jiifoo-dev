@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 // カメラを開いて写真を1枚撮る画面
-// シミュレーターなどカメラがない端末では、代わりに写真ライブラリから選ぶ
-// 使い方: .fullScreenCover(isPresented: $showCamera) { CameraPicker { image in ... } }
+// アプリ内で撮った写真だけを使うため、実機ではカメラだけ(写真ライブラリからは選べない)
+// シミュレーターにはカメラがないので、動作確認用にライブラリから選ぶ
 struct CameraPicker: UIViewControllerRepresentable {
     // 撮れたときに呼ばれる(キャンセルしたときは呼ばれない)
     var onCapture: (UIImage) -> Void
@@ -11,7 +11,13 @@ struct CameraPicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        #if targetEnvironment(simulator)
+        picker.sourceType = .photoLibrary   // シミュレーターだけ
+        #else
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo   // 写真だけ(動画は撮らない)
+        #endif
+
         picker.delegate = context.coordinator
         return picker
     }
