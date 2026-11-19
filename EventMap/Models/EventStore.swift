@@ -58,6 +58,7 @@ final class EventStore {
             joinedEventIDs = try await joined
             checkedInEventIDs = try await checkedIn
             await NotificationManager.syncGathering(with: joinedEvents)
+            await GatheringActivityManager.sync(with: joinedEvents) //デバイスがロック状態時sのカウントダウン
         } catch {
             message = "イベントを読み込めませんでした"
             print("イベントの読み込みに失敗:", error)
@@ -393,6 +394,17 @@ final class EventStore {
             return false
         }
     }
+
+    // 次に集合モードが始まる時刻(参加予定の時間厳守型イベントのうち、一番早いもの)
+    var nextGatheringStart: Date? {
+        joinedEvents
+            .filter { $0.joinType == .fixed }
+            .map { $0.startsAt.addingTimeInterval(-5 * 60) }
+            .filter { $0 > .now }
+            .min()
+    }
+
+
     func reset(){
         events=[]
         joinedEventIDs = []
@@ -403,6 +415,7 @@ final class EventStore {
         lastLoadedCenter = nil
         //ログアウトしたとき、予約していた通知を全部消す
         NotificationManager.cancelAll()
+        Task { await GatheringActivityManager.end()} //ログアウト後のしたらロック画面に表示しているカウントダウンも削除
     }
     
 

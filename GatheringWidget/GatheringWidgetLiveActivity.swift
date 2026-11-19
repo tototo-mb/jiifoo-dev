@@ -19,6 +19,16 @@ struct GatheringWidgetLiveActivity: Widget {
                     Text(isOver(context) ? "集合時刻です" : "集合まで")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    // 集合モードが始まる時刻(集合の5分前)
+                    if !isOver(context) {
+                        HStack(spacing: 0) {
+                            Text(modeStart(context), style: .time)
+                            Text("から集合モード")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+
                 }
 
                 Spacer()
@@ -62,6 +72,11 @@ struct GatheringWidgetLiveActivity: Widget {
                     .foregroundStyle(.purple)
             }
         }
+    }
+
+    // 集合モードが始まる時刻(集合の5分前。サーバーの event_phase と同じ)
+    private func modeStart(_ context: ActivityViewContext<GatheringAttributes>) -> Date {
+        context.state.meetTime.addingTimeInterval(-5 * 60)
     }
 
     // 集合時刻を過ぎたか

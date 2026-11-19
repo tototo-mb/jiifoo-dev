@@ -13,6 +13,7 @@ struct GatheringView: View {
 
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(GatheringMode.self) private var gathering //今集合モード中か
 
     @State private var members: [GatheringMember] = []
     @State private var myStatus: String
@@ -118,6 +119,15 @@ struct GatheringView: View {
                 }
             }
             .navigationTitle(event.title)
+            // 画面のふちの光を付ける
+            .overlay {
+                if gathering.isActive {
+                    ScreenEdgeGlowView(rhythmHaptics: false)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.4), value: gathering.isActive)
+
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -1,6 +1,8 @@
 import SwiftUI
 import MapKit
 
+
+
 // ① 地図でイベントを見る画面（旧 CurrentlocationMapView）
 struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
@@ -148,22 +150,21 @@ struct EventMapView: View {
             .environment(locationManager)
         }
 
-        // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
-                let previous = gatheringEvent?.id
-                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
-                //イベント開催時刻よりも前に会場にいた場合
-                if let here = locationManager.userLocation{
-                    eventStore.arriveIfNear(here)
-                }
-                // 集合モードが始まった・終わったら地図を読み直す(終わったイベントを消すため)
-                if previous != gatheringEvent?.id {
-                    await eventStore.reload()
-                }
+                await checkGathering()
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+        // 次の集合モードが始まる時刻ぴったりにも確認する(30秒ごとだと最大30秒遅れるため)
+        .task(id: eventStore.nextGatheringStart) {
+            guard let start = eventStore.nextGatheringStart else { return }
+            let wait = start.timeIntervalSinceNow + 1   // サーバーと時計が少しずれても大丈夫なように1秒待つ
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled else { return }
+            await checkGathering()
+        }
+
         // 集合中のイベントがあれば、画面の上にバナーを出す
         .safeAreaInset(edge: .top) {
             if let gatheringEvent {
@@ -174,7 +175,9 @@ struct EventMapView: View {
         .fullScreenCover(item: $openedGathering) { event in
             GatheringView(event: event)
                 .environment(locationManager)
+                .environment(gathering)
         }
+        
         //通知がタップされたら、集合画面を開く
         .onChange(of: NotificationDelegate.shared.tappedEventID){_,eventID in
             guard let eventID else {return}
@@ -187,6 +190,30 @@ struct EventMapView: View {
         }
     }
 }
+
+    // MARK: - 集合モード
+
+    // 自分が集合中のイベントがあるか確認する
+    // 始まったら光・振動・カウントダウンを出し、終わったら消す
+    private func checkGathering() async {
+        let previous = gatheringEvent?.id
+        gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+        //イベント開催時刻よりも前に会場にいた場合
+        if let here = locationManager.userLocation {
+            eventStore.arriveIfNear(here)
+        }
+        // 集合モードが始まった・終わったとき
+        if previous != gatheringEvent?.id {
+            if let event = gatheringEvent {
+                gathering.start(title: event.title, meetTime: event.startsAt)   // 突入の演出
+            } else {
+                gathering.stop()
+            }
+            await eventStore.reload()   // 地図を読み直す(終わったイベントを消すため)
+        }
+    }
+
+
 
     // MARK: - 画面の部品
 
