@@ -72,6 +72,11 @@ struct EventDetailView: View {
                         Text(event.description)
                     }
                 }
+                // 途中参加OK型の開催中は「イベントの様子」(参加者が公開した写真)
+                if event.joinType == .dropIn && event.startsAt <= .now && .now < event.endsAt {
+                    EventPublicPhotosSection(event: event)
+                }
+
             }            .navigationTitle(event.title)
             .navigationBarTitleDisplayMode(.inline)
             // 画面下に参加ボタンを固定

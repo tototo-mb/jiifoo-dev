@@ -254,6 +254,39 @@ nonisolated struct SearchEventsParams: Encodable, Sendable {
     let lng: Double
     let radius_m: Double?
 }
+
+// イベントの公開中の写真1枚分(event_public_photos の結果。イベント詳細の「イベントの様子」)
+nonisolated struct PublicPhoto: Codable, Identifiable, Hashable, Sendable {
+    let path: String
+    let createdAt: Date
+    let isMine: Bool              // 自分が撮った写真か
+    let reportCount: Int          // 通報の数(主催者にだけ数が入る。ほかの人は 0)
+
+    var id: String { path }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case createdAt = "created_at"
+        case isMine = "is_mine"
+        case reportCount = "report_count"
+    }
+}
+
+// 写真を通報するときに送る値
+nonisolated struct ReportPhotoParams: Encodable, Sendable {
+    let p_path: String
+    let p_reason: String
+}
+
+
+
+// 写真の公開を切り替えるときに送る値
+nonisolated struct SetPhotoPublicParams: Encodable, Sendable {
+    let p_path: String
+    let p_public: Bool
+}
+
+
  
 // 撮影枠を取るときに送る値(今いる場所も一緒に送る)
 nonisolated struct ReservePhotoParams: Encodable, Sendable {
@@ -525,6 +558,55 @@ enum JiifooAPI {
             .execute()
             .value
     }
+
+
+    // このイベントで自分が「みんなに公開」している写真の保存場所
+    static func myPublicPhotoPaths(eventId: UUID) async throws -> Set<String> {
+        nonisolated struct Row: Decodable, Sendable { let path: String }
+        let rows: [Row] = try await supabase
+            .from("event_photos")
+            .select("path")
+            .eq("event_id", value: eventId)
+            .eq("is_public", value: true)
+            .execute()
+            .value
+        return Set(rows.map(\.path))
+    }
+
+    // イベントの公開中の写真(開催中の途中参加OK型だけ。新しい順)
+    static func eventPublicPhotos(eventId: UUID) async throws -> [PublicPhoto] {
+        try await supabase
+            .rpc("event_public_photos", params: ["p_event_id": eventId])
+            .execute()
+            .value
+    }
+
+    // 写真を通報する("ok" / "not_found" / "not_logged_in")
+    static func reportPhoto(path: String, reason: String) async throws -> String {
+        try await supabase
+            .rpc("report_photo", params: ReportPhotoParams(p_path: path, p_reason: reason))
+            .execute()
+            .value
+    }
+
+    // 主催者が写真を非公開にする("ok" / "not_found" / "not_allowed")
+    static func hidePhoto(path: String) async throws -> String {
+        try await supabase
+            .rpc("hide_photo", params: ["p_path": path])
+            .execute()
+            .value
+    }
+
+
+
+    // 写真を「みんなに公開」する・やめる("ok" / "not_found" / "not_allowed")
+    static func setPhotoPublic(path: String, isPublic: Bool) async throws -> String {
+        try await supabase
+            .rpc("set_photo_public", params: SetPhotoPublicParams(p_path: path, p_public: isPublic))
+            .execute()
+            .value
+    }
+
 
     static func eventMembers(eventId: UUID) async throws -> [GatheringMember] {
         try await supabase

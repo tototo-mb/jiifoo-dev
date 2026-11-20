@@ -532,7 +532,7 @@ struct EventMapView: View {
         }
     }
 
-    // MARK: - カメラ
+
 
     // MARK: - カメラ
 
