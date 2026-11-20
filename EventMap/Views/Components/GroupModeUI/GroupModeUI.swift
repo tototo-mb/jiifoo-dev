@@ -146,7 +146,7 @@ enum GatheringActivityManager {
     /// アプリを開いたとき・参加/キャンセルしたときに呼ぶ(EventStore.load から)
     static func sync(with events: [Event]) async {
         let next = events
-            .filter { $0.joinType == .fixed && $0.startsAt > .now }
+            .filter { $0.startsAt > .now } //両タイプ適用
             .min { $0.startsAt < $1.startsAt }
 
         guard let next else {
@@ -159,12 +159,12 @@ enum GatheringActivityManager {
            current.content.state.meetTime == next.startsAt {
             return
         }
-        await start(title: next.title, meetTime: next.startsAt)
+        await start(title: next.title, meetTime: next.startsAt, isDropIn: next.joinType == .dropIn)
     }
 
 
     /// カウントダウンを始める（前のものがあれば消してから）
-    static func start(title: String, meetTime: Date) async {
+    static func start(title: String, meetTime: Date,isDropIn: Bool = false) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             print("🟣 LiveActivity: Info.plist か iPhone の設定でオフになっています")
             return
@@ -177,7 +177,7 @@ enum GatheringActivityManager {
         )
         do {
             _ = try Activity.request(
-                attributes: GatheringAttributes(eventTitle: title),
+                attributes: GatheringAttributes(eventTitle: title, isDropIn: isDropIn),
                 content: content,
                 pushType: nil
             )

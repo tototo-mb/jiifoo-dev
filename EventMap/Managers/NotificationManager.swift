@@ -9,11 +9,17 @@ enum NotificationManager {
 static func scheduleGathering(id: UUID,
                             title: String,
                             placeName: String,
-                            startsAt: Date) async {
-    //通知の中身
+                            startsAt: Date,
+                            isDropIn: Bool = false) async {
+    //通知の中身(途中参加OK型は「間も無く開始」)
     let content = UNMutableNotificationContent()
-    content.title = "集合モードが始まりました"
-    content.body = "「\(title)」の集合場所：\(placeName)"
+    if isDropIn {
+        content.title = "まもなくイベントが開始されます"
+        content.body = "参加予定のイベントがまもなく始まります。\nイベント名：\(title)\n会場：\(placeName)"
+    } else {
+        content.title = "集合モードが始まりました"
+        content.body = "イベント名：\(title)\n会場：\(placeName)"
+    }
     content.sound = .default
 
     //通知のトリガー
@@ -34,11 +40,12 @@ static func scheduleGathering(id: UUID,
 
 
     static func scheduleGathering(for event: Event) async{
-            guard event.joinType == .fixed else { return } //追加分
+            //途中参加可能型も開始5分前に「まもなく開始」の通知を送る
             await scheduleGathering(id: event.id,
                                 title: event.title,
                                 placeName: event.placeName,
-                                startsAt:event.startsAt)
+                                startsAt:event.startsAt,
+                                isDropIn: event.joinType == .dropIn)
     }
 
         //参加登録したイベントが中止になった場合

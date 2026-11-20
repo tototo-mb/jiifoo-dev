@@ -11,4 +11,5 @@ struct GatheringAttributes: ActivityAttributes {
 
     // 最初に決めたら変わらない値
     var eventTitle: String          // イベント名
+    var isDropIn: Bool //途中参加可能型か
 }

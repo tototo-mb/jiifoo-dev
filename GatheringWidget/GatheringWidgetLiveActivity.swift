@@ -8,19 +8,18 @@ struct GatheringWidgetLiveActivity: Widget {
         ActivityConfiguration(for: GatheringAttributes.self) { context in
             // ---- ロック画面・通知の上に出る表示 ----
             HStack(spacing: 12) {
-                Image(systemName: "figure.walk.motion")
-                    .font(.title2)
-                    .foregroundStyle(.purple)
-
+                Image(systemName: icon(context))
+                    .font(.title2)               
+                    .foregroundStyle(.purple)         
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.attributes.eventTitle)
                         .font(.headline)
                         .lineLimit(1)
-                    Text(isOver(context) ? "集合時刻です" : "集合まで")
+                    Text(label(context))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     // 集合モードが始まる時刻(集合の5分前)
-                    if !isOver(context) {
+                    if !isOver(context) && !context.attributes.isDropIn {
                         HStack(spacing: 0) {
                             Text(modeStart(context), style: .time)
                             Text("から集合モード")
@@ -45,7 +44,7 @@ struct GatheringWidgetLiveActivity: Widget {
             DynamicIsland {
                 // ---- 長押しで大きく開いたとき ----
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("集合", systemImage: "figure.walk.motion")
+                    Label(context.attributes.isDropIn ? "開始" : "集合", systemImage: icon(context))
                         .font(.headline)
                         .foregroundStyle(.purple)
                 }
@@ -61,14 +60,14 @@ struct GatheringWidgetLiveActivity: Widget {
                         .lineLimit(1)
                 }
             } compactLeading: {
-                Image(systemName: "figure.walk.motion")
+                Image(systemName: icon(context))
                     .foregroundStyle(.purple)
             } compactTrailing: {
                 countdown(context)
                     .font(.caption.bold())
                     .frame(width: 44)
             } minimal: {
-                Image(systemName: "figure.walk.motion")
+                Image(systemName: icon(context))
                     .foregroundStyle(.purple)
             }
         }
@@ -79,6 +78,21 @@ struct GatheringWidgetLiveActivity: Widget {
         context.state.meetTime.addingTimeInterval(-5 * 60)
     }
 
+        // アイコン(途中参加OK型はお祭りっぽく)
+    private func icon(_ context: ActivityViewContext<GatheringAttributes>) -> String {
+        context.attributes.isDropIn ? "party.popper" : "figure.walk.motion"
+    }
+
+    // カウントダウンの上の文字
+    private func label(_ context: ActivityViewContext<GatheringAttributes>) -> String {
+        if context.attributes.isDropIn {
+            return isOver(context) ? "開始しました" : "開始まで"
+        }
+        return isOver(context) ? "集合時刻です" : "集合まで"
+    }
+
+
+
     // 集合時刻を過ぎたか
     private func isOver(_ context: ActivityViewContext<GatheringAttributes>) -> Bool {
         context.isStale || context.state.meetTime <= .now
@@ -88,7 +102,7 @@ struct GatheringWidgetLiveActivity: Widget {
     @ViewBuilder
     private func countdown(_ context: ActivityViewContext<GatheringAttributes>) -> some View {
         if isOver(context) {
-            Text("集合！")
+            Text(context.attributes.isDropIn ? "開始！" : "集合！")
                 .foregroundStyle(.orange)
         } else {
             Text(timerInterval: Date.now...context.state.meetTime, countsDown: true)
