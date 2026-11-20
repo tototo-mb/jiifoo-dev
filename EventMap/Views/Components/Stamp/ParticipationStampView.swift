@@ -8,7 +8,8 @@ import SwiftUI
 // ・個人イベントは赤、法人イベントは紺のインク
 // ・決まった大きさ（340×290）で描いて、置いた場所の大きさに合わせて縮める
 //   → 一覧の小さいマスでも、詳細画面の大きい表示でも同じ見た目になる
-// ・暗い画面でもインクの色が読めるように、台紙（明るい紙）の上に押す
+// ・背景は透明（画面の背景がそのまま見える）
+// ・ダークモードでは、暗い背景でも読めるように法人のインクを白にする（個人は赤のまま）
 // =====================================================
 
 // スタンプに載せる内容
@@ -58,14 +59,22 @@ struct ParticipationStamp: Hashable {
     }()
 }
 
-// スタンプのインクと台紙の色
+// スタンプのインクの色（ライト / ダークで変える）
 enum StampInk {
+    // ライトモード
     static let individual = Color(red: 0.788, green: 0.200, blue: 0.169)  // #C9332B 赤
     static let corporate  = Color(red: 0.137, green: 0.243, blue: 0.545)  // #233E8B 紺
-    static let paper      = Color(red: 0.933, green: 0.941, blue: 0.925)  // #EEF0EC 台紙
+    // ダークモード（黒い背景で読めるように）
+    static let individualDark = Color(red: 1.000, green: 0.322, blue: 0.282)  // #FF5248 明るい赤
+    static let corporateDark  = Color.white                                  // 白
 
-    static func color(isCorporate: Bool) -> Color {
-        isCorporate ? corporate : individual
+    static func color(isCorporate: Bool, scheme: ColorScheme) -> Color {
+        switch (isCorporate, scheme) {
+        case (true, .dark):  return corporateDark
+        case (false, .dark): return individualDark
+        case (true, _):      return corporate
+        default:             return individual
+        }
     }
 }
 
@@ -101,9 +110,10 @@ struct ParticipationStampView: View {
 // スタンプの絵（340×290 の中に、デザイン案Dと同じ位置で並べる）
 private struct StampFace: View {
     let stamp: ParticipationStamp
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let ink = StampInk.color(isCorporate: stamp.isCorporate)
+        let ink = StampInk.color(isCorporate: stamp.isCorporate, scheme: colorScheme)
 
         ZStack {
             // 二重の枠
@@ -176,16 +186,16 @@ private struct StampFace: View {
     }
 }
 
-// 台紙の上に押したスタンプ（一覧のマス・詳細画面で使う）
+// 余白をつけたスタンプ（一覧のマス・詳細画面で使う）。背景は透明
 struct StampOnPaper: View {
     let stamp: ParticipationStamp
     var padding: CGFloat = 12
-    var cornerRadius: CGFloat = 12
+    var cornerRadius: CGFloat = 12   // 以前の台紙の角丸（今は使っていない。呼び出し側との互換のため残す）
 
     var body: some View {
         ParticipationStampView(stamp: stamp)
             .padding(padding)
-            .background(StampInk.paper, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .contentShape(Rectangle())   // 透明でも、余白を含めた全体をタップできるように
     }
 }
 
@@ -199,5 +209,17 @@ struct StampOnPaper: View {
             date: .now, isCorporate: true))
     }
     .padding()
-    .background(.black)
+}
+
+#Preview("スタンプ（ダークモード）") {
+    VStack(spacing: 24) {
+        StampOnPaper(stamp: ParticipationStamp(
+            eventID: UUID(), title: "缶蹴り", organizerName: "ユーザー名",
+            date: .now, isCorporate: false))
+        StampOnPaper(stamp: ParticipationStamp(
+            eventID: UUID(), title: "大原口喧嘩祭", organizerName: "法人名",
+            date: .now, isCorporate: true))
+    }
+    .padding()
+    .preferredColorScheme(.dark)
 }
