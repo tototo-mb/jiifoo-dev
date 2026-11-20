@@ -1,4 +1,5 @@
 import UIKit
+import CoreLocation
 import Supabase
 
 // 写真の保存・表示をまとめた所(今は Supabase Storage を使う)
@@ -65,6 +66,48 @@ enum PhotoStorage {
             .remove(paths: [path])
     }
 
+    // MARK: - 思い出の写真(1人1イベント最大5枚)
+
+    // 1人1イベントで撮れる枚数(Supabase の reserve_photo_slot と同じ数にする)
+    static let maxMemoryPhotos = 5
+
+    // 思い出の写真を1枚増やす:枠を取る → 保存。保存に失敗したら枠を返す
+    // 成功したら保存場所の名前を返す
+    // here:今いる場所(会場の中か、サーバーでも確かめる)
+    static func addMemoryPhoto(_ image: UIImage, eventID: UUID, here: CLLocationCoordinate2D) async throws -> String {
+        let result = try await JiifooAPI.reservePhotoSlot(
+            eventId: eventID, latitude: here.latitude, longitude: here.longitude)
+        switch result {
+        case "limit_reached": throw PhotoError.limitReached
+        case "not_arrived":   throw PhotoError.notArrived
+        case "not_open":      throw PhotoError.notOpen
+        case "too_far":       throw PhotoError.tooFar
+        default: break
+        }
+        guard result.hasPrefix("events/") else { throw PhotoError.unknown(result) }
+
+        do {
+            try await upload(image, to: result)
+        } catch {
+            _ = try? await JiifooAPI.deleteEventPhoto(path: result)   // 枠を返す(枚数に数えない)
+            throw error
+        }
+        return result
+    }
+
+    // 撮り直す:同じ名前に上書きする(枚数は増えない)
+    static func retakeMemoryPhoto(_ image: UIImage, path: String) async throws {
+        try await upload(image, to: path)
+    }
+
+    // 思い出の写真を消す:ファイル → 記録の順に消す
+    // (ファイルを消せなかったときは記録を残すので、写真と記録がずれない)
+    static func deleteMemoryPhoto(path: String) async throws {
+        try await delete(path: path)
+        _ = try await JiifooAPI.deleteEventPhoto(path: path)
+    }
+
+
     // MARK: - 縮小・圧縮
 
     // 長い辺を maxLength(px) までに縮めて JPEG にする
@@ -86,11 +129,23 @@ enum PhotoStorage {
 enum PhotoError: LocalizedError {
     case compressFailed
     case decodeFailed
+    case limitReached        // すでに5枚撮り終わっている
+    case notArrived          // 到着していない(参加済になっていない)
+    case notOpen             // 撮影できる時間ではない
+    case tooFar              // 会場から離れている
+    case unknown(String)     // それ以外(サーバーからの返事をそのまま入れる)
+
 
     var errorDescription: String? {
         switch self {
         case .compressFailed: return "写真を変換できませんでした"
         case .decodeFailed: return "写真を読み込めませんでした"
+        case .limitReached: return "このイベントで撮れるのは\(PhotoStorage.maxMemoryPhotos)枚までです"
+        case .notArrived: return "会場に到着した人だけが撮影できます"
+        case .notOpen: return "今は撮影できる時間ではありません"
+        case .tooFar: return "会場の中で撮影してください"
+        case .unknown(let result): return "写真を保存できませんでした(\(result))"
+
         }
     }
 }

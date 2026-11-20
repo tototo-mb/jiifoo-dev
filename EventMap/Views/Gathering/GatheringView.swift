@@ -13,6 +13,7 @@ struct GatheringView: View {
 
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(GatheringMode.self) private var gathering //今集合モード中か
 
     @State private var members: [GatheringMember] = []
     @State private var myStatus: String
@@ -28,6 +29,8 @@ struct GatheringView: View {
     @State private var photoUserIDs: Set<UUID> = [] //到着時の写真を撮った人
     @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
+    @State private var photoEvent: PhotoEvent? //終了後に開く撮影画面
+
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -118,6 +121,15 @@ struct GatheringView: View {
                 }
             }
             .navigationTitle(event.title)
+            // 画面のふちの光を付ける
+            .overlay {
+                if gathering.isActive {
+                    ScreenEdgeGlowView(rhythmHaptics: false)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.4), value: gathering.isActive)
+
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -226,11 +238,22 @@ struct GatheringView: View {
                 }
                 await supabase.removeChannel(channel)
             }
-            //集合モードが終わったら通知してOKボタンを押したら画面を閉じる
+            // 到着していた人は、そのまま思い出の写真を撮れる
             .alert("集合モードが終了しました",isPresented: $isEnded){
+                if isCheckedIn {
+                    Button("写真を撮る") { openMemoryCamera() }
+                }
                 Button("OK"){ dismiss()}
+            } message: {
+                if isCheckedIn {
+                    Text("会場の中で、撮影終了の時刻まで思い出の写真を撮れます")
+                }
             }
-
+            // 撮影画面(閉じたら集合画面も閉じる)
+            .sheet(item: $photoEvent, onDismiss: { dismiss() }) { event in
+                MemoryCameraView(event: event)
+                    .environment(locationManager)
+            }
 
         }
     }
@@ -331,6 +354,20 @@ struct GatheringView: View {
             }
         }
     }
+
+    // 撮影画面を開く(撮影できるかはサーバーに聞いてから)
+    private func openMemoryCamera() {
+        Task {
+            let list = (try? await JiifooAPI.myPhotoEvents()) ?? []
+            if let found = list.first(where: { $0.id == event.id }) {
+                photoEvent = found
+            } else {
+                message = "今は撮影できません。地図の「思い出カメラ」から開いてください"
+            }
+        }
+    }
+
+
 
     private func endGathering() {
         isEnding = true

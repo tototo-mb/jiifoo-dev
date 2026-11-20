@@ -106,7 +106,49 @@ nonisolated struct PastEvent: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-// MARK: - データの形(Supabase に送る)
+// MARK: データの形(Supabase に送る)
+
+
+// 今、思い出の写真を撮れるイベント(my_photo_events の結果。地図のバナーで使う)
+nonisolated struct PhotoEvent: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let title: String
+    let placeName: String
+    let latitude: Double
+    let longitude: Double
+    let joinType: JoinType
+    let photoUntil: Date          // 撮影できる最後の時刻
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, latitude, longitude
+        case placeName = "place_name"
+        case joinType = "join_type"
+        case photoUntil = "photo_until"
+    }
+}
+
+
+
+//思い出の写真１枚分（my_event_photosの結果　ユーザーページで自分が参加したイベントを振り返るため使用）
+nonisolated struct MemoryPhoto: Codable,Identifiable, Hashable, Sendable {
+    let path: String //保存場所の名前
+    let createdAt: Date //撮影日時
+    let eventId: UUID
+    let eventTitle: String
+    let placeName: String
+    let startsAt: Date
+
+    var id: String { path }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case createdAt = "created_at"
+        case eventId = "event_id" 
+        case eventTitle = "event_title"
+        case placeName = "place_name"
+        case startsAt = "starts_at" 
+    }
+}
 
 // イベント編集で送る内容(update_event)
 nonisolated struct UpdateEventParams: Encodable, Sendable {
@@ -144,23 +186,25 @@ nonisolated struct NewEvent: Encodable, Sendable {
     //11/13追加分
     let joinType: JoinType
     let endsAt: Date? //合コン型は送らない→トリガーが１時間後を自動で入れる
+    let photoEndsAt: Date? //時間厳守型(合コン型)の撮影できる時間の期限（途中参加可能型は送らない）
 
     enum CodingKeys: String, CodingKey {
         case title, category, description, location, capacity
         //　11/13追加分
         case joinType = "join_type"
         case endsAt = "ends_at"
-        
         case creatorId = "creator_id"
         case organizationId="organization_id"
         case placeName = "place_name"
         case startsAt = "starts_at"
+        case photoEndsAt = "photo_ends_at"
     }
 }
 
 nonisolated struct CreatedEvent: Decodable, Sendable {
     let id: UUID
 }
+
 //MARK: - 集合モード
 // ① データの形(Supabase から受け取る)
  
@@ -211,6 +255,13 @@ nonisolated struct SearchEventsParams: Encodable, Sendable {
     let radius_m: Double?
 }
  
+// 撮影枠を取るときに送る値(今いる場所も一緒に送る)
+nonisolated struct ReservePhotoParams: Encodable, Sendable {
+    let p_event_id: UUID
+    let p_lat: Double
+    let p_lng: Double
+}
+
 // ② check_in に送る値
 nonisolated struct CheckInParams: Encodable, Sendable {
     let p_event_id: UUID
@@ -266,8 +317,8 @@ enum JiifooAPI {
         capacity: Int?,
         organizationId:UUID?,
         joinType: JoinType = .fixed,
-        endsAt: Date? = nil
-        
+        endsAt: Date? = nil,
+        photoEndsAt: Date? = nil
     ) async throws -> UUID {
         let userId = try await supabase.auth.session.user.id
         let event = NewEvent(
@@ -283,7 +334,8 @@ enum JiifooAPI {
             capacity: capacity,
             // 11/13追加分
             joinType: joinType,
-            endsAt: endsAt
+            endsAt: endsAt,
+            photoEndsAt: photoEndsAt
         )
         
         let created: CreatedEvent = try await supabase
@@ -480,7 +532,56 @@ enum JiifooAPI {
             .execute()
             .value
     }
- 
+    
+    //MARK:思い出の写真
+
+    //撮影枠を取る（保存作の名前、もしくは"not/_member" , "limit_reaced" などが返る）
+    static func reservePhotoSlot(eventId: UUID, latitude: Double, longitude: Double) async throws -> String {
+        try await supabase
+            .rpc("reserve_photo_slot",
+                 params: ReservePhotoParams(p_event_id: eventId, p_lat: latitude, p_lng: longitude))
+            .execute()
+            .value
+    }
+
+    // 今、思い出の写真を撮れるイベント(到着済み・撮影できる時間内)
+    static func myPhotoEvents() async throws -> [PhotoEvent] {
+        try await supabase
+            .rpc("my_photo_events")
+            .execute()
+            .value
+    }
+
+
+    //写真の記録を消す
+    static func deleteEventPhoto(path: String) async throws -> String {
+        try await supabase
+            .rpc("delete_event_photo", params:["p_path": path])
+            .execute()
+            .value
+    }
+
+    //自分の思い出の写真
+    static func myMemoryPhotos() async throws -> [MemoryPhoto] {
+        try await supabase
+            .rpc("my_event_photos")
+            .execute()
+            .value
+    }
+
+    //参加したイベントで自分が撮影した写真の保存場所
+    static func myPhotoPaths(eventId: UUID) async throws -> [String] {
+        nonisolated struct Row:  Decodable, Sendable { let path: String }
+        let rows: [Row] = try await supabase 
+            .from("event_photos")
+            .select("path")
+            .eq("event_id",value: eventId)
+            .order("created_at")
+            .execute()
+            .value
+        return rows.map(\.path)
+    }
+
     // 到着チェックイン("ok" / "too_far" / "not_gathering" などが返る)
     static func checkIn(eventId: UUID, latitude: Double, longitude: Double) async throws -> String {
         try await supabase

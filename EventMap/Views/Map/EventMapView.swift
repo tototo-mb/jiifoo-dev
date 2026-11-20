@@ -1,6 +1,8 @@
 import SwiftUI
 import MapKit
 
+
+
 // ① 地図でイベントを見る画面（旧 CurrentlocationMapView）
 struct EventMapView: View {
     @Environment(LocationManager.self) private var locationManager
@@ -29,6 +31,8 @@ struct EventMapView: View {
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
+    @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
+    @State private var openedPhotoEvent: PhotoEvent?     // 開いている撮影画面
     @State private var showFilter = false               // フィルター画面を表示中か
 
     var body: some View {
@@ -50,10 +54,24 @@ struct EventMapView: View {
         }
         // 集合モードの光とカウントダウン（GroupModeUI.swift）
         .gatheringModeOverlay()
-        // ▼ テスト用：起動したら10分後集合で集合モードを始める（集合機能ができたら消す）
-        /*.onAppear {
-            if !gathering.isActive { gathering.start(title: "集合", minutes: 10) }
-        }*/
+        //途中参加型イベントに参加し、初めてイベント開催地に到着した場合
+        .overlay {
+            if eventStore.arrivalEffectEvent != nil {
+                ScreenEdgeGlowView()
+                    .transition(.opacity)
+            }
+        }
+
+            .overlay(alignment: .top) {
+                arrivalBadge
+            }
+            .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
+            .task(id: eventStore.arrivalEffectEvent?.id) {
+                guard eventStore.arrivalEffectEvent != nil else { return }
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                eventStore.arrivalEffectEvent = nil
+        }
         // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
         .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
@@ -148,33 +166,45 @@ struct EventMapView: View {
             .environment(locationManager)
         }
 
-        // 30秒ごとに「自分が集合中のイベントがあるか」を確認する
         .task {
             while !Task.isCancelled {
-                let previous = gatheringEvent?.id
-                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
-                //イベント開催時刻よりも前に会場にいた場合
-                if let here = locationManager.userLocation{
-                    eventStore.arriveIfNear(here)
-                }
-                // 集合モードが始まった・終わったら地図を読み直す(終わったイベントを消すため)
-                if previous != gatheringEvent?.id {
-                    await eventStore.reload()
-                }
+                await checkGathering()
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+        // 次の集合モードが始まる時刻ぴったりにも確認する(30秒ごとだと最大30秒遅れるため)
+        .task(id: eventStore.nextGatheringStart) {
+            guard let start = eventStore.nextGatheringStart else { return }
+            let wait = start.timeIntervalSinceNow + 1   // サーバーと時計が少しずれても大丈夫なように1秒待つ
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled else { return }
+            await checkGathering()
+        }
+
         // 集合中のイベントがあれば、画面の上にバナーを出す
         .safeAreaInset(edge: .top) {
-            if let gatheringEvent {
-                gatheringBanner(for: gatheringEvent)
+            VStack(spacing: 8) {
+                if let gatheringEvent {
+                    gatheringBanner(for: gatheringEvent)
+                }
+                // 思い出の写真を撮れるイベントがあれば、撮影画面へのバナーも出す
+                if let photoEvent = photoEvents.first {
+                    photoBanner(for: photoEvent)
+                }
             }
+        }
+        // 撮影画面
+        .sheet(item: $openedPhotoEvent) { event in
+            MemoryCameraView(event: event)
+                .environment(locationManager)
         }
         // 集合画面(全画面)
         .fullScreenCover(item: $openedGathering) { event in
             GatheringView(event: event)
                 .environment(locationManager)
+                .environment(gathering)
         }
+
         //通知がタップされたら、集合画面を開く
         .onChange(of: NotificationDelegate.shared.tappedEventID){_,eventID in
             guard let eventID else {return}
@@ -188,7 +218,71 @@ struct EventMapView: View {
     }
 }
 
+    // MARK: - 集合モード
+
+    // 自分が集合中のイベントがあるか確認する
+    // 始まったら光・振動・カウントダウンを出し、終わったら消す
+    private func checkGathering() async {
+        let previous = gatheringEvent?.id
+        gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+        //イベント開催時刻よりも前に会場にいた場合
+        if let here = locationManager.userLocation {
+            eventStore.arriveIfNear(here)
+        }
+        // 思い出の写真を撮れるイベント(撮影のバナー用)
+        if let list = try? await JiifooAPI.myPhotoEvents() {
+            photoEvents = list
+        }
+
+        // 集合モードが始まった・終わったとき
+        if previous != gatheringEvent?.id {
+            if let event = gatheringEvent {
+                gathering.start(title: event.title, meetTime: event.startsAt)   // 突入の演出
+            } else {
+                gathering.stop()
+            }
+            await eventStore.reload()   // 地図を読み直す(終わったイベントを消すため)
+        }
+    }
+
+
+
     // MARK: - 画面の部品
+
+    // 会場に初めて着いたときに上に出す「会場に到着しました」(× で演出を消す)
+    @ViewBuilder
+    private var arrivalBadge: some View {
+        if let event = eventStore.arrivalEffectEvent {
+            HStack(spacing: 10) {
+                Image(systemName: "party.popper.fill")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("会場に到着しました")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(event.title)
+                        .font(.subheadline.bold())
+                        .lineLimit(1)
+                }
+                Button {
+                    eventStore.arrivalEffectEvent = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+
 
     //イベント一覧表示機能用のカメラ
     private var farEventsStartCamera: MapCamera? {
@@ -207,13 +301,26 @@ struct EventMapView: View {
                 return shown
         }
         return shown + [focused]
+    }    
+    
+    // 地図を動かせる範囲（現在地から800m）とズームアウトの上限
+    private var cameraBounds: MapCameraBounds? {
+        // 「地図で場所を見る」で遠くのイベントを見ているときは制限しない
+        guard eventStore.focusedEvent == nil,
+              let here = locationManager.userLocation else { return nil }
+        let region = MKCoordinateRegion(center: here,
+                                        latitudinalMeters: Self.limitRadius * 2,
+                                        longitudinalMeters: Self.limitRadius * 2)
+        return MapCameraBounds(centerCoordinateBounds: region,
+                               minimumDistance: nil,
+                               maximumDistance: Self.maxZoomOutDistance)
     }
 
     // 地図
     //地図のボタン
     private var mapLayer: some View {
         MapReader { proxy in
-            Map(position: $cameraPosition, selection: $selectedEventID) {
+            Map(position: $cameraPosition, bounds: cameraBounds, selection: $selectedEventID) { 
                 UserAnnotation()
                 if showJoinableRange, let userLocation = locationManager.userLocation {
                     MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
@@ -315,6 +422,37 @@ struct EventMapView: View {
         guard let l = locationManager.userLocation else { return "none" }
         return String(format: "%.3f,%.3f", l.latitude, l.longitude)
     }
+    // 撮影画面を開くバナー(会場の外では灰色。開いて写真を見ることはできる)
+    private func photoBanner(for event: PhotoEvent) -> some View {
+        let distance = locationManager.distance(
+            to: CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude))
+        let isInVenue = (distance ?? .infinity) <= MemoryCameraView.venueRadius
+        return Button {
+            openedPhotoEvent = event
+        } label: {
+            HStack {
+                Image(systemName: "camera.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isInVenue ? "思い出カメラ" : "会場から離れています")
+                        .font(.caption.bold())
+                    Text(event.title)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("開く")
+                    .font(.subheadline.bold())
+                Image(systemName: "chevron.right")
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isInVenue ? Color.blue : Color.gray, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal)
+        }
+    }
+
+
     // 集合モードのバナー(body が長くなりすぎないよう分けている)
     private func gatheringBanner(for event: GatheringEvent) -> some View {
         Button {
@@ -396,11 +534,17 @@ struct EventMapView: View {
 
     // MARK: - カメラ
 
+    // MARK: - カメラ
+
     private let zoomDistance: Double = 800      // 近づく距離(m)
     private let pinScreenRatio: CGFloat = 0.25  // ピンを置きたい位置（上から1/4。下の詳細シートに隠れないように）
-    private static let homeDistance: Double = 5000   // 現在地ボタンで戻るときの高さ(m)。小さいほど拡大
 
-    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
+    // 地図で見える範囲の半径(m)。イベントの表示範囲(800m)より少し広めにする
+    private static let limitRadius: CLLocationDistance = 1000
+    // いちばん引いたときのカメラの高さ(m)。半径に合わせて自動で計算する
+    // (800mのとき3000mだった比率をそのまま使う)
+    private static let maxZoomOutDistance: Double = limitRadius * 3.75
+    private static let homeDistance: Double = maxZoomOutDistance   // 現在地ボタンで戻るときの高さ(m)    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
     private func zoomToEvent(_ event: Event) {
         cameraTask?.cancel()   // 前の動きを止める
         isReturningHome = false

@@ -56,6 +56,8 @@ struct EventDetailView: View {
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
                     }
+
+
                     if showMapButton {
                         Button {
                             eventStore.focusedEvent = event
@@ -152,6 +154,7 @@ struct EventDetailView: View {
             } message: {
                 Text("参加者の地図からも消えます")
             }
+
             .sheet(isPresented: $showEditEvent) {
                 EditEventView(event: event)
             }

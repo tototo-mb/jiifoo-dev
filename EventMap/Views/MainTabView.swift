@@ -86,4 +86,5 @@ struct MainTabView: View {
         .environment(LocationManager())
         .environment(EventStore())
         .environment(AuthManager())
+        .environment(GatheringMode())
 }

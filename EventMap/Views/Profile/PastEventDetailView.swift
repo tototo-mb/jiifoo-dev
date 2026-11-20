@@ -12,6 +12,9 @@ struct PastEventDetailView: View {
     @State private var memberNames: [UUID: String] = [:]
     @State private var isLoading = true
     @State private var viewingUserID: UUID?
+    @State private var memoryPaths: [String] = []      // 自分が撮った思い出の写真(古い順)
+    @State private var viewingMemoryPath: String?      // 大きく表示している思い出の写真
+
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 3)
 
@@ -24,6 +27,36 @@ struct PastEventDetailView: View {
                 LabeledContent("場所", value: event.placeName)
                 LabeledContent("立場", value: event.isCreator ? "主催" : "参加")
             }
+
+
+            // 思い出の写真(自分だけが見られる)
+            Section {
+                if isLoading {
+                    HStack { ProgressView(); Text("読み込み中…") }
+                } else if memoryPaths.isEmpty {
+                    Text("このイベントで撮影した写真はありません")
+                        .foregroundStyle(.secondary)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 4) {
+                        ForEach(memoryPaths, id: \.self) { path in
+                            Button {
+                                viewingMemoryPath = path
+                            } label: {
+                                StoredPhotoView(path: path)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            } header: {
+                Text("思い出の写真")
+            } footer: {
+                Text("自分だけが見られます")
+            }
+
 
             Section {
                 if isLoading {
@@ -93,11 +126,31 @@ struct PastEventDetailView: View {
                     }
             }
         }
+        // 思い出の写真を大きく表示
+        .sheet(item: Binding(
+            get: { viewingMemoryPath.map(IdentifiedPath.init) },
+            set: { viewingMemoryPath = $0?.id }
+        )) { item in
+            NavigationStack {
+                StoredPhotoView(path: item.id, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle("思い出の写真")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("閉じる") { viewingMemoryPath = nil }
+                        }
+                    }
+            }
+        }
+
     }
 
     private func load() async {
         isLoading = true
         defer { isLoading = false }
+        // 自分が撮った思い出の写真
+        memoryPaths = (try? await JiifooAPI.myPhotoPaths(eventId: event.id)) ?? []
         // 見られる写真だけが返ってくる(参加者は自分の分、主催者は全員分)
         let ids = (try? await PhotoStorage.arrivalPhotoUserIDs(eventID: event.id)) ?? []
         photoUserIDs = ids.sorted { $0.uuidString < $1.uuidString }
@@ -112,6 +165,10 @@ struct PastEventDetailView: View {
 // sheet(item:) で UUID を使うための入れ物
 private struct IdentifiedUUID: Identifiable {
     let id: UUID
+}
+
+private struct IdentifiedPath: Identifiable {
+    let id: String
 }
 
 #Preview {

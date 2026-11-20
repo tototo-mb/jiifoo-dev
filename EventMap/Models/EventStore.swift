@@ -11,6 +11,10 @@ final class EventStore {
     var joinedEventIDs: Set<Event.ID> = []   // 参加予定(自分が作成したものも含む)
     var myUserID: UUID?
     var checkedInEventIDs: Set<Event.ID> = [] //参加済み（会場に到着済み）のイベント
+
+    @ObservationIgnored private var isInVenue: [Event.ID: Bool] = [:] //途中参加OK型の会場の中にいるか(出入りの通知用)
+    var arrivalEffectEvent: Event? //会場に初めて着いたときの演出を出しているイベント
+
     @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
@@ -58,6 +62,7 @@ final class EventStore {
             joinedEventIDs = try await joined
             checkedInEventIDs = try await checkedIn
             await NotificationManager.syncGathering(with: joinedEvents)
+            await GatheringActivityManager.sync(with: joinedEvents) //デバイスがロック状態時sのカウントダウン
         } catch {
             message = "イベントを読み込めませんでした"
             print("イベントの読み込みに失敗:", error)
@@ -80,20 +85,34 @@ final class EventStore {
         checkedInEventIDs.contains(event.id)
     }
 
+    // 会場の広さ(サーバーの check_in と同じ)と、「会場を出た」とみなす距離
+    // (GPS は止まっていても数十m ぶれるので、出たかどうかは少し遠めで判断する)
+    static let venueRadius: Double = 100
+    static let venueLeaveRadius: Double = 150
+
     //途中参加可能型：参加予定のイベントの会場(100m以内)に着いたら、自動的に参加済みにする
+    // 1回目(参加済になったとき):通知 + 光・振動
+    // 2回目以降(一度出て、また入ったとき):通知だけ
     func arriveIfNear(_ here: CLLocationCoordinate2D) {
         let now = Date()
         let hereLocation = CLLocation(latitude: here.latitude, longitude: here.longitude)
         for event in events {
-                //途中参加可能型で、イベント開催期間で参加予定かつ未参加の状態のみ
+            //途中参加可能型で、イベント開催中で、参加予定のイベントだけ
             guard event.joinType == .dropIn,
-                    isJoined(event),
-                    !isCheckedIn(event),
-                    !arrivingIDs.contains(event.id),
-                    event.startsAt <= now, now < event.endsAt else { continue }
-            //イベント開催地から100m以内か
+                  isJoined(event),
+                  event.startsAt <= now, now < event.endsAt else { continue }
             let venue = CLLocation(latitude: event.latitude, longitude: event.longitude)
-            guard hereLocation.distance(from: venue) <= 100 else { continue }
+            let distance = hereLocation.distance(from: venue)
+
+            // 2回目以降:会場を出入りしたか調べる
+            if isCheckedIn(event) {
+                updateVenueState(event, distance: distance)
+                continue
+            }
+
+            // 1回目:イベント開催地から100m以内に入ったら参加済にする
+            guard !arrivingIDs.contains(event.id),
+                  distance <= Self.venueRadius else { continue }
 
             arrivingIDs.insert(event.id)
             Task{
@@ -102,10 +121,33 @@ final class EventStore {
                 if result == "ok" || result == "already_checked_in" {
                     checkedInEventIDs.insert(event.id)
                 }
+                // 初めて参加済になったときだけ、通知と演出
+                if result == "ok" {
+                    isInVenue[event.id] = true
+                    arrivalEffectEvent = event
+                    await NotificationManager.notifyArrival(title: event.title, isFirst: true)
+                }
                 arrivingIDs.remove(event.id)
             }
         }
     }
+
+    // 会場を出入りしたか調べて、入ったときは通知する(参加済のイベント用)
+    // ・100m 以内 → 「中」。前が「外」なら通知
+    // ・150m より遠い → 「外」
+    // ・その間 → 前の状態のまま(境目でぶれても何度も通知しない)
+    private func updateVenueState(_ event: Event, distance: Double) {
+        let wasInside = isInVenue[event.id]   // nil = まだわからない(アプリを開いた直後など)
+        if distance <= Self.venueRadius {
+            if wasInside == false {
+                Task { await NotificationManager.notifyArrival(title: event.title, isFirst: false) }
+            }
+            isInVenue[event.id] = true
+        } else if distance > Self.venueLeaveRadius {
+            isInVenue[event.id] = false
+        }
+    }
+
 
     func isMine(_ event: Event) -> Bool {
         guard let myUserID, let creator = event.creatorID else { return false }
@@ -354,7 +396,8 @@ final class EventStore {
         capacity: Int?,
         organizationId:UUID?,
         joinType: JoinType,
-        endsAt: Date?
+        endsAt: Date?,
+        photoEndsAt: Date?
 
     ) async -> Bool {
         do {
@@ -371,7 +414,8 @@ final class EventStore {
                 organizationId: organizationId,
                 // 11/13追加分
                 joinType: joinType,
-                endsAt: endsAt
+                endsAt: endsAt,
+                photoEndsAt: photoEndsAt
             )
             //主催者にも集合モードの通知を予約
             if joinType == .fixed{
@@ -393,16 +437,30 @@ final class EventStore {
             return false
         }
     }
+
+    // 次に集合モードが始まる時刻(参加予定の時間厳守型イベントのうち、一番早いもの)
+    var nextGatheringStart: Date? {
+        joinedEvents
+            .filter { $0.joinType == .fixed }
+            .map { $0.startsAt.addingTimeInterval(-5 * 60) }
+            .filter { $0 > .now }
+            .min()
+    }
+
+
     func reset(){
         events=[]
         joinedEventIDs = []
         myUserID = nil
         message = nil
+        arrivalEffectEvent = nil
+        isInVenue = [:]
         cancelledNotices = []
         placeChangedNotices = []
         lastLoadedCenter = nil
         //ログアウトしたとき、予約していた通知を全部消す
         NotificationManager.cancelAll()
+        Task { await GatheringActivityManager.end()} //ログアウト後のしたらロック画面に表示しているカウントダウンも削除
     }
     
 
