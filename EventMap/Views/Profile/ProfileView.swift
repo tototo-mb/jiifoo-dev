@@ -24,6 +24,7 @@ struct ProfileView: View {
     @State private var pastEvents: [PastEvent] = []   // 過去に参加・主催したイベント(Supabase から読み込む)
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+    private let stampColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
 
     var body: some View {
         NavigationStack {
@@ -54,14 +55,16 @@ struct ProfileView: View {
                                 systemImage: "calendar.badge.exclamationmark")
                                 .padding(.top, 24)
                         } else {
-                            LazyVGrid(columns: columns, spacing: 2) {
+                            // 参加スタンプを2列で並べる（タップで大きいスタンプと写真の画面へ）
+                            LazyVGrid(columns: stampColumns, spacing: 12) {
                                 ForEach(pastEvents) { event in
                                     NavigationLink(value: event) {
-                                        PastEventGridTile(event: event)
+                                        StampOnPaper(stamp: ParticipationStamp(event: event), padding: 10)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
+                            .padding(.horizontal, 12)
                         }
                     case .joined:
                         if eventStore.joinedEvents.isEmpty {
