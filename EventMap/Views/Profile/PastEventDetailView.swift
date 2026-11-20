@@ -1,7 +1,7 @@
 import SwiftUI
 
-// 過去のイベントの詳細(マイページの「過去に参加したイベント」から開く)
-// 到着時の写真を表示する
+// 過去のイベントの詳細(マイページの「過去に参加したイベント」のスタンプから開く)
+// いちばん上に参加スタンプを大きく出し、その下に写真を表示する
 //   参加者 → 自分が撮った写真だけ
 //   主催者 → 全員分
 // ※ 誰の写真が見えるかは Supabase の Storage のルールで決まっている(ここは表示するだけ)
@@ -20,6 +20,13 @@ struct PastEventDetailView: View {
 
     var body: some View {
         List {
+            // 参加スタンプを大きく表示
+            Section {
+                StampOnPaper(stamp: ParticipationStamp(event: event), padding: 20, cornerRadius: 16)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+
             Section {
                 LabeledContent("日時") {
                     Text(event.startsAt, format: .dateTime.year().month().day().hour().minute())
@@ -175,6 +182,6 @@ private struct IdentifiedPath: Identifiable {
     NavigationStack {
         PastEventDetailView(event: PastEvent(
             id: UUID(), title: "缶蹴り", placeName: "記念公園",
-            startsAt: .now, kind: "corporate", isCreator: true))
+            startsAt: .now, kind: "corporate", isCreator: true, organizerName: "法人名"))
     }
 }

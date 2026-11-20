@@ -97,12 +97,14 @@ nonisolated struct PastEvent: Codable, Identifiable, Hashable, Sendable {
     let startsAt: Date
     let kind: String              // "normal" / "corporate"
     let isCreator: Bool           // 自分が主催したか
+    let organizerName: String?    // 主催者の名前（法人イベントは法人名）。参加スタンプに出す
 
     enum CodingKeys: String, CodingKey {
         case id, title, kind
         case placeName = "place_name"
         case startsAt = "starts_at"
         case isCreator = "is_creator"
+        case organizerName = "organizer_name"
     }
 }
 
