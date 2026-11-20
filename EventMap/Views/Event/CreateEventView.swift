@@ -19,6 +19,7 @@ struct CreateEventView: View {
     @State private var hasCapacityLimit = true
     @State private var joinType: JoinType = .fixed //イベントタイプ（合コン型orお祭り型）
     @State private var durationHours = 2 //お祭り型の開催時間の初期値
+    @State private var photoEndsAt = Date().addingTimeInterval(90 * 60) //時間厳守型の撮影終了(初期値は開始の1時間後)
 
  
     // 地図用
@@ -74,6 +75,16 @@ struct CreateEventView: View {
                                     ForEach(1...10, id: \.self) { n in
                                         Text("\(n)人").tag(n)
                                 }
+                            }
+                        }
+                        // 集合したあと、会場内でこの時刻まで思い出の写真を撮れる
+                        DatePicker("イベント終了", selection: $photoEndsAt,
+                                    in: photoEndsAtRange,
+                                    displayedComponents: [.date, .hourAndMinute])
+                        // 開始時刻を変えて範囲から外れたら、開始の1時間後に戻す
+                        .onChange(of: startsAt) {
+                            if !photoEndsAtRange.contains(photoEndsAt) {
+                                photoEndsAt = startsAt.addingTimeInterval(60 * 60)
                             }
                         }
                         case .dropIn:
@@ -164,6 +175,12 @@ struct CreateEventView: View {
         return from...to
     }
 
+    // 撮影終了に選べる範囲(開始の1分後〜開始の3時間後。Supabase のルールと同じ)
+    private var photoEndsAtRange: ClosedRange<Date> {
+        startsAt.addingTimeInterval(60)...startsAt.addingTimeInterval(3 * 60 * 60)
+    }
+
+
 
     private var joinTypeDescription: String{
         switch joinType{
@@ -197,8 +214,12 @@ struct CreateEventView: View {
                 //途中参加できるイベントだけ終了時刻を送る
                 endsAt: joinType == .dropIn
                     ? startsAt.addingTimeInterval(Double(durationHours) * 60 * 60)
-                    : nil
+                    : nil,
+                //時間厳守型だけ撮影終了を送る
+                photoEndsAt: joinType == .fixed ? photoEndsAt : nil
             )
+
+            
             isSaving = false
             // 成功したら入力を空に戻して、マップへ戻る(失敗時はアラートが出て画面はそのまま)
             if success {
@@ -223,6 +244,7 @@ struct CreateEventView: View {
         inputMode = .map
         joinType = .fixed
         durationHours = 2
+        photoEndsAt = Date().addingTimeInterval(90 * 60)
     }
 
     // 集合場所の名前で検索

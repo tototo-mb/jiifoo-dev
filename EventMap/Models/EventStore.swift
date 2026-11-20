@@ -355,7 +355,8 @@ final class EventStore {
         capacity: Int?,
         organizationId:UUID?,
         joinType: JoinType,
-        endsAt: Date?
+        endsAt: Date?,
+        photoEndsAt: Date?
 
     ) async -> Bool {
         do {
@@ -372,7 +373,8 @@ final class EventStore {
                 organizationId: organizationId,
                 // 11/13追加分
                 joinType: joinType,
-                endsAt: endsAt
+                endsAt: endsAt,
+                photoEndsAt: photoEndsAt
             )
             //主催者にも集合モードの通知を予約
             if joinType == .fixed{

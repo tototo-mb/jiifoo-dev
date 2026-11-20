@@ -10,7 +10,6 @@ struct EventDetailView: View {
     @State private var showCancelDialog = false 
     var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
     @Environment(\.dismiss) private var dismiss
-    @State private var showMemoryCamera = false //写真を撮る画面を出す？
     @State private var showEditEvent = false //編集画面を出す？
     private var canEdit: Bool { eventStore.canEdit(event) } // 自分が主催していて、集合モード開始前だけ編集できる
     
@@ -57,14 +56,7 @@ struct EventDetailView: View {
                     if let distance {
                         LabeledContent("現在地から", value: formatDistance(distance))
                     }
-                    // 思い出の写真(仮:段階2・3で「会場内・撮影できる時間だけ」に変える)
-                    if isJoined {
-                        Button {
-                            showMemoryCamera = true
-                        } label: {
-                            Label("思い出の写真を撮る", systemImage: "camera")
-                        }
-                    }
+
 
                     if showMapButton {
                         Button {
@@ -162,9 +154,7 @@ struct EventDetailView: View {
             } message: {
                 Text("参加者の地図からも消えます")
             }
-            .sheet(isPresented: $showMemoryCamera) {
-                MemoryCameraView(eventID: event.id, eventTitle: event.title)
-            }
+
             .sheet(isPresented: $showEditEvent) {
                 EditEventView(event: event)
             }

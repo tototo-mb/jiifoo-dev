@@ -31,6 +31,8 @@ struct EventMapView: View {
     @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
+    @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
+    @State private var openedPhotoEvent: PhotoEvent?     // 開いている撮影画面
     @State private var showFilter = false               // フィルター画面を表示中か
 
     var body: some View {
@@ -167,9 +169,20 @@ struct EventMapView: View {
 
         // 集合中のイベントがあれば、画面の上にバナーを出す
         .safeAreaInset(edge: .top) {
-            if let gatheringEvent {
-                gatheringBanner(for: gatheringEvent)
+            VStack(spacing: 8) {
+                if let gatheringEvent {
+                    gatheringBanner(for: gatheringEvent)
+                }
+                // 思い出の写真を撮れるイベントがあれば、撮影画面へのバナーも出す
+                if let photoEvent = photoEvents.first {
+                    photoBanner(for: photoEvent)
+                }
             }
+        }
+        // 撮影画面
+        .sheet(item: $openedPhotoEvent) { event in
+            MemoryCameraView(event: event)
+                .environment(locationManager)
         }
         // 集合画面(全画面)
         .fullScreenCover(item: $openedGathering) { event in
@@ -177,7 +190,7 @@ struct EventMapView: View {
                 .environment(locationManager)
                 .environment(gathering)
         }
-        
+
         //通知がタップされたら、集合画面を開く
         .onChange(of: NotificationDelegate.shared.tappedEventID){_,eventID in
             guard let eventID else {return}
@@ -202,6 +215,11 @@ struct EventMapView: View {
         if let here = locationManager.userLocation {
             eventStore.arriveIfNear(here)
         }
+        // 思い出の写真を撮れるイベント(撮影のバナー用)
+        if let list = try? await JiifooAPI.myPhotoEvents() {
+            photoEvents = list
+        }
+
         // 集合モードが始まった・終わったとき
         if previous != gatheringEvent?.id {
             if let event = gatheringEvent {
@@ -234,13 +252,26 @@ struct EventMapView: View {
                 return shown
         }
         return shown + [focused]
+    }    
+    
+    // 地図を動かせる範囲（現在地から800m）とズームアウトの上限
+    private var cameraBounds: MapCameraBounds? {
+        // 「地図で場所を見る」で遠くのイベントを見ているときは制限しない
+        guard eventStore.focusedEvent == nil,
+              let here = locationManager.userLocation else { return nil }
+        let region = MKCoordinateRegion(center: here,
+                                        latitudinalMeters: Self.limitRadius * 2,
+                                        longitudinalMeters: Self.limitRadius * 2)
+        return MapCameraBounds(centerCoordinateBounds: region,
+                               minimumDistance: nil,
+                               maximumDistance: Self.maxZoomOutDistance)
     }
 
     // 地図
     //地図のボタン
     private var mapLayer: some View {
         MapReader { proxy in
-            Map(position: $cameraPosition, selection: $selectedEventID) {
+            Map(position: $cameraPosition, bounds: cameraBounds, selection: $selectedEventID) { 
                 UserAnnotation()
                 if showJoinableRange, let userLocation = locationManager.userLocation {
                     MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
@@ -342,6 +373,37 @@ struct EventMapView: View {
         guard let l = locationManager.userLocation else { return "none" }
         return String(format: "%.3f,%.3f", l.latitude, l.longitude)
     }
+    // 撮影画面を開くバナー(会場の外では灰色。開いて写真を見ることはできる)
+    private func photoBanner(for event: PhotoEvent) -> some View {
+        let distance = locationManager.distance(
+            to: CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude))
+        let isInVenue = (distance ?? .infinity) <= MemoryCameraView.venueRadius
+        return Button {
+            openedPhotoEvent = event
+        } label: {
+            HStack {
+                Image(systemName: "camera.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isInVenue ? "思い出カメラ" : "会場から離れています")
+                        .font(.caption.bold())
+                    Text(event.title)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("開く")
+                    .font(.subheadline.bold())
+                Image(systemName: "chevron.right")
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isInVenue ? Color.blue : Color.gray, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal)
+        }
+    }
+
+
     // 集合モードのバナー(body が長くなりすぎないよう分けている)
     private func gatheringBanner(for event: GatheringEvent) -> some View {
         Button {
@@ -423,11 +485,17 @@ struct EventMapView: View {
 
     // MARK: - カメラ
 
+    // MARK: - カメラ
+
     private let zoomDistance: Double = 800      // 近づく距離(m)
     private let pinScreenRatio: CGFloat = 0.25  // ピンを置きたい位置（上から1/4。下の詳細シートに隠れないように）
-    private static let homeDistance: Double = 5000   // 現在地ボタンで戻るときの高さ(m)。小さいほど拡大
 
-    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
+    // 地図で見える範囲の半径(m)。イベントの表示範囲(800m)より少し広めにする
+    private static let limitRadius: CLLocationDistance = 1000
+    // いちばん引いたときのカメラの高さ(m)。半径に合わせて自動で計算する
+    // (800mのとき3000mだった比率をそのまま使う)
+    private static let maxZoomOutDistance: Double = limitRadius * 3.75
+    private static let homeDistance: Double = maxZoomOutDistance   // 現在地ボタンで戻るときの高さ(m)    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
     private func zoomToEvent(_ event: Event) {
         cameraTask?.cancel()   // 前の動きを止める
         isReturningHome = false

@@ -1,4 +1,5 @@
 import UIKit
+import CoreLocation
 import Supabase
 
 // 写真の保存・表示をまとめた所(今は Supabase Storage を使う)
@@ -72,11 +73,15 @@ enum PhotoStorage {
 
     // 思い出の写真を1枚増やす:枠を取る → 保存。保存に失敗したら枠を返す
     // 成功したら保存場所の名前を返す
-    static func addMemoryPhoto(_ image: UIImage, eventID: UUID) async throws -> String {
-        let result = try await JiifooAPI.reservePhotoSlot(eventId: eventID)
+    // here:今いる場所(会場の中か、サーバーでも確かめる)
+    static func addMemoryPhoto(_ image: UIImage, eventID: UUID, here: CLLocationCoordinate2D) async throws -> String {
+        let result = try await JiifooAPI.reservePhotoSlot(
+            eventId: eventID, latitude: here.latitude, longitude: here.longitude)
         switch result {
         case "limit_reached": throw PhotoError.limitReached
-        case "not_member":    throw PhotoError.notMember
+        case "not_arrived":   throw PhotoError.notArrived
+        case "not_open":      throw PhotoError.notOpen
+        case "too_far":       throw PhotoError.tooFar
         default: break
         }
         guard result.hasPrefix("events/") else { throw PhotoError.unknown(result) }
@@ -125,7 +130,9 @@ enum PhotoError: LocalizedError {
     case compressFailed
     case decodeFailed
     case limitReached        // すでに5枚撮り終わっている
-    case notMember           // このイベントの参加者ではない
+    case notArrived          // 到着していない(参加済になっていない)
+    case notOpen             // 撮影できる時間ではない
+    case tooFar              // 会場から離れている
     case unknown(String)     // それ以外(サーバーからの返事をそのまま入れる)
 
 
@@ -134,7 +141,9 @@ enum PhotoError: LocalizedError {
         case .compressFailed: return "写真を変換できませんでした"
         case .decodeFailed: return "写真を読み込めませんでした"
         case .limitReached: return "このイベントで撮れるのは\(PhotoStorage.maxMemoryPhotos)枚までです"
-        case .notMember: return "このイベントの参加者だけが撮影できます"
+        case .notArrived: return "会場に到着した人だけが撮影できます"
+        case .notOpen: return "今は撮影できる時間ではありません"
+        case .tooFar: return "会場の中で撮影してください"
         case .unknown(let result): return "写真を保存できませんでした(\(result))"
 
         }
