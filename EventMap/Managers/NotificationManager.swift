@@ -57,6 +57,23 @@ static func scheduleGathering(id: UUID,
         }
     }
 
+    // 途中参加OK型の会場に入ったとき、すぐに知らせる
+    // isFirst:初めて着いたとき true、一度出て戻ってきたとき false
+    static func notifyArrival(title: String, isFirst: Bool) async {
+        let content = UNMutableNotificationContent()
+        content.title = isFirst ? "会場に到着しました" : "会場に戻りました"
+        content.body = "「\(title)」に参加中です。カメラ機能が使用可能です"
+        content.sound = .default
+
+        // trigger を nil にすると、すぐに通知する
+        let request = UNNotificationRequest(identifier: "arrival-\(UUID().uuidString)",
+                                            content: content,
+                                            trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+
+
     //ログアウトした時用
     //予約を全部消す
     static func cancelAll(){

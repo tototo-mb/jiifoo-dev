@@ -54,10 +54,24 @@ struct EventMapView: View {
         }
         // 集合モードの光とカウントダウン（GroupModeUI.swift）
         .gatheringModeOverlay()
-        // ▼ テスト用：起動したら10分後集合で集合モードを始める（集合機能ができたら消す）
-        /*.onAppear {
-            if !gathering.isActive { gathering.start(title: "集合", minutes: 10) }
-        }*/
+        //途中参加型イベントに参加し、初めてイベント開催地に到着した場合
+        .overlay {
+            if eventStore.arrivalEffectEvent != nil {
+                ScreenEdgeGlowView()
+                    .transition(.opacity)
+            }
+        }
+
+            .overlay(alignment: .top) {
+                arrivalBadge
+            }
+            .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
+            .task(id: eventStore.arrivalEffectEvent?.id) {
+                guard eventStore.arrivalEffectEvent != nil else { return }
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                eventStore.arrivalEffectEvent = nil
+        }
         // およそ100m動くたびに読み込みを試す(実際の読み込みは300m以上動いたときだけ)
         .task(id: locationKey) {
             if let userLocation = locationManager.userLocation {
@@ -234,6 +248,41 @@ struct EventMapView: View {
 
 
     // MARK: - 画面の部品
+
+    // 会場に初めて着いたときに上に出す「会場に到着しました」(× で演出を消す)
+    @ViewBuilder
+    private var arrivalBadge: some View {
+        if let event = eventStore.arrivalEffectEvent {
+            HStack(spacing: 10) {
+                Image(systemName: "party.popper.fill")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("会場に到着しました")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(event.title)
+                        .font(.subheadline.bold())
+                        .lineLimit(1)
+                }
+                Button {
+                    eventStore.arrivalEffectEvent = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+
 
     //イベント一覧表示機能用のカメラ
     private var farEventsStartCamera: MapCamera? {
