@@ -8,7 +8,8 @@ struct EventPublicPhotosSection: View {
     @Environment(EventStore.self) private var eventStore
 
     @State private var photos: [PublicPhoto] = []
-    @State private var viewingPhoto: PublicPhoto?    // 大きく表示している写真
+    @Binding var viewingPhoto: PublicPhoto?    // 大きく表示する写真(シートは EventDetailView で出す)
+    var reloadID: UUID                         // 変わったら読み直す(非公開にしたあとなど)
 
     private var isOrganizer: Bool { eventStore.isMine(event) }
 
@@ -52,13 +53,8 @@ struct EventPublicPhotosSection: View {
         } footer: {
             Text("参加者が公開した写真です。開催中だけ見られます")
         }
-        .task {
+        .task(id: reloadID) {
             await loadPhotos()
-        }
-        .sheet(item: $viewingPhoto) { photo in
-            PublicPhotoDetailView(photo: photo, isOrganizer: isOrganizer) {
-                await loadPhotos()   // 非公開にしたら読み直す
-            }
         }
     }
 

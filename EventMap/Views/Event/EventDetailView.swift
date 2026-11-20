@@ -10,6 +10,8 @@ struct EventDetailView: View {
     @State private var showCancelDialog = false 
     var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
     @Environment(\.dismiss) private var dismiss
+    @State private var viewingPublicPhoto: PublicPhoto?   //「イベントの様子」で大きく表示している写真
+    @State private var publicPhotosReloadID = UUID()      //「イベントの様子」を読み直すための目印
     @State private var showEditEvent = false //編集画面を出す？
     private var canEdit: Bool { eventStore.canEdit(event) } // 自分が主催していて、集合モード開始前だけ編集できる
     
@@ -74,7 +76,10 @@ struct EventDetailView: View {
                 }
                 // 途中参加OK型の開催中は「イベントの様子」(参加者が公開した写真)
                 if event.joinType == .dropIn && event.startsAt <= .now && .now < event.endsAt {
-                    EventPublicPhotosSection(event: event)
+                    EventPublicPhotosSection(event: event,
+                            viewingPhoto: $viewingPublicPhoto,
+                            reloadID: publicPhotosReloadID)
+
                 }
 
             }            .navigationTitle(event.title)
@@ -160,9 +165,13 @@ struct EventDetailView: View {
                 Text("参加者の地図からも消えます")
             }
 
-            .sheet(isPresented: $showEditEvent) {
-                EditEventView(event: event)
+            //「イベントの様子」の写真を大きく表示(List の外で出すので、勝手に閉じない)
+            .sheet(item: $viewingPublicPhoto) { photo in
+                PublicPhotoDetailView(photo: photo, isOrganizer: isMine) {
+                    publicPhotosReloadID = UUID()   // 非公開にしたら一覧を読み直す
+                }
             }
+
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)
             .alert(eventStore.message ?? "", isPresented: Binding(
