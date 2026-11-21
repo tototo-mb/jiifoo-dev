@@ -23,6 +23,7 @@ struct EventMapView: View {
     @State private var showCreateEvent = false
     @State private var showFarEvents = false //各地のイベントの一覧を出すか
     @State private var lastCamera: MapCamera?
+    @State private var pinScale: CGFloat = 1             // ピンの大きさ(ズームインすると大きくなる)    
     @State private var cameraTask: Task<Void, Never>?   // 実行中のカメラの動き
     @State private var isReturningHome = false          // 現在地へ戻っている最中
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
@@ -350,6 +351,10 @@ struct EventMapView: View {
                                     ])))            
                 .onMapCameraChange(frequency: .onEnd) { context in
                     lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
+                    // 高さに合わせてピンの大きさを変える(動かし終わったときだけ。ふわっと)
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        pinScale = Self.pinScale(for: context.camera.distance)
+                    }
             }
             .ignoresSafeArea()
             .onAppear { mapProxy = proxy }
@@ -491,25 +496,55 @@ struct EventMapView: View {
     @ViewBuilder
     private func eventPin(for event: Event) -> some View {
         let joinable = locationManager.isJoinable(event.coordinate)
-        Group {
-            if event.scale == .businessMode {
-                BusinessPinView(isJoinable: joinable)
-            } else {
-                PrivatePinView(isJoinable: joinable)
+        // 開始時刻を過ぎたら「開催中」の目印を付ける(10秒ごとに確かめる)
+        TimelineView(.periodic(from: .now, by: 10)) { context in
+            let isLive = event.startsAt <= context.date
+            Group {
+                if isLive {
+                    // 開催中:fire_pin.riv の炎(タップは炎の根元だけ)
+                    FirePinView(style: .live) {
+                        selectPin(event)
+                    }
+                    .saturation(joinable ? 1 : 0)
+                    .opacity(joinable ? 1 : 0.6)
+                } else {
+                    // 開始前:今までの炎
+                    Group {
+                        if event.scale == .businessMode {
+                            BusinessPinView(isJoinable: joinable)
+                        } else {
+                            PrivatePinView(isJoinable: joinable)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectPin(event)
+                    }
+                }
             }
+            .livePinEffect(isLive)
+            .scaleEffect(pinScale, anchor: .bottom)   // ズームインしたら大きく
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // ピンを押す前のカメラを記録（2回目以降のタップでは上書きしない）
-            if savedCamera == nil {
-                savedCamera = lastCamera
-                wasFollowing = isFollowing
-            }
+    }
 
-            isFollowing = false   // ピンを見ている間は現在地に引き戻さない
-            selectedEventID = event.id
-            zoomToEvent(event)
+    // ピンを押したとき:詳細を開いて、そのピンへズームする
+    private func selectPin(_ event: Event) {
+        // ピンを押す前のカメラを記録（2回目以降のタップでは上書きしない）
+        if savedCamera == nil {
+            savedCamera = lastCamera
+            wasFollowing = isFollowing
         }
+
+        isFollowing = false   // ピンを見ている間は現在地に引き戻さない
+        selectedEventID = event.id
+        zoomToEvent(event)
+    }
+
+    // カメラの高さに合わせたピンの大きさ(近づくほど大きく。最大2倍)
+    // 平方根(sqrt)を使って、近づいたときに急に大きくなりすぎないようにする
+    private static func pinScale(for distance: Double) -> CGFloat {
+        let scale = (homeDistance / max(distance, 1)).squareRoot()
+        return CGFloat(min(max(scale, 1), 2))
     }
 
     // MARK: - 現在地の追従
