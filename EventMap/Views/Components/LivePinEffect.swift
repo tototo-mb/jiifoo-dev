@@ -16,9 +16,20 @@ struct LivePinEffect: ViewModifier {
                         .offset(y: 6)
                 }
             }
+            // 上の「LIVE」
+            .overlay(alignment: .top) {
+                if isLive {
+                    Text("LIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.red, in: Capsule())
+                        .offset(y: -10)
+                }
             }
     }
-
+}
 
 // 足元に広がって消えていく輪(2つを少しずらして繰り返す)
 struct LiveRipple: View {
@@ -49,7 +60,12 @@ struct LiveRipple: View {
     }
 }
 
-
+extension View {
+    /// 開催中なら、足元の波紋と「LIVE」の印を付ける
+    func livePinEffect(_ isLive: Bool) -> some View {
+        modifier(LivePinEffect(isLive: isLive))
+    }
+}
 
 #Preview {
     VStack(spacing: 40) {
