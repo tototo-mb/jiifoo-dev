@@ -16,6 +16,7 @@ struct MemoryCameraView: View {
     @State private var isLoading = false
     @State private var isSaving = false
     @State private var showCamera = false
+    @State private var showCameraNotice = false //撮影前の注意喚起(参加したイベントで初めてカメラを起動する時)
     @State private var retakingPath: String?             // 撮り直す写真(nil なら新しく撮る)
     @State private var selectedPath: String?             // 押した写真(撮り直し・削除を選ぶ)
     @State private var message: String?
@@ -94,7 +95,7 @@ struct MemoryCameraView: View {
                                     .foregroundStyle(.secondary)
                                 Button {
                                     retakingPath = nil
-                                    showCamera = true
+                                    openCamera()
                                 } label: {
                                     Label(remaining > 0 ? "撮影する(あと\(remaining)枚)" : "撮影できる枚数に達しました",
                                           systemImage: "camera.fill")
@@ -120,7 +121,7 @@ struct MemoryCameraView: View {
                         if canShoot(at: .now) {
                             Button("撮り直す") {
                                 retakingPath = path
-                                showCamera = true
+                                openCamera()
                             }
                         }
                         if event.joinType == .dropIn {
@@ -143,6 +144,15 @@ struct MemoryCameraView: View {
                         }
                         .ignoresSafeArea()
                     }
+                    // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
+                    .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
+                        Button("OK") {
+                            PhotoNotice.markCameraNoticeSeen(eventID: event.id)
+                            showCamera = true
+                        }
+                    } message: {
+                        Text(PhotoNotice.cameraMessage)
+                    }
                     .alert(message ?? "", isPresented: Binding(
                         get: { message != nil },
                         set: { if !$0 { message = nil } }
@@ -156,6 +166,15 @@ struct MemoryCameraView: View {
             }
             
             // MARK: - 処理
+
+            // カメラを開く(このイベントで初めてなら、先に注意を出す)
+            private func openCamera() {
+                if PhotoNotice.hasSeenCameraNotice(eventID: event.id) {
+                    showCamera = true
+                } else {
+                    showCameraNotice = true
+                }
+            }
             
             // このイベントで自分が撮った写真を読み込む
             private func loadPaths() async {

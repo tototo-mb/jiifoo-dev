@@ -26,6 +26,7 @@ struct GatheringView: View {
     @State private var myUserID: UUID?
     @State private var showArrivalChoice = false //「写真を撮る/撮らない」の選択を出すか
     @State private var showCamera = false
+    @State private var showCameraNotice = false   // 撮影前の注意(このイベントで初めてのとき)
     @State private var photoUserIDs: Set<UUID> = [] //到着時の写真を撮った人
     @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
@@ -191,10 +192,19 @@ struct GatheringView: View {
             .confirmationDialog("到着を記録します",
                                 isPresented: $showArrivalChoice,
                                 titleVisibility: .visible) {
-                Button("写真を撮って到着する") { showCamera = true }
-                Button("写真なしで到着する") { checkIn() }
+            Button("写真を撮って到着する") { openCamera() }                
+            Button("写真なしで到着する") { checkIn() }
             } message: {
                 Text("写真は主催者と参加者だけが見られます")
+            }
+            // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
+            .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
+                Button("OK") {
+                    PhotoNotice.markCameraNoticeSeen(eventID: event.id)
+                    showCamera = true
+                }
+            } message: {
+                Text(PhotoNotice.cameraMessage)
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image in
@@ -257,6 +267,16 @@ struct GatheringView: View {
 
         }
     }
+
+    // カメラを開く(このイベントで初めてなら、先に注意を出す)
+    private func openCamera() {
+        if PhotoNotice.hasSeenCameraNotice(eventID: event.id) {
+            showCamera = true
+        } else {
+            showCameraNotice = true
+        }
+    }
+
 
     // MARK: - 到着ボタン
 

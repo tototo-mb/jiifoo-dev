@@ -14,7 +14,7 @@ struct PastEventDetailView: View {
     @State private var viewingUserID: UUID?
     @State private var memoryPaths: [String] = []      // 自分が撮った思い出の写真(古い順)
     @State private var viewingMemoryPath: String?      // 大きく表示している思い出の写真
-
+    @State private var showOrganizerNotice = false     // 主催者が写真を見る前の注意
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 3)
 
@@ -113,7 +113,18 @@ struct PastEventDetailView: View {
         }
         .navigationTitle(event.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            await load()
+            // 主催者で写真があれば、注意を出す
+            if event.isCreator && !photoUserIDs.isEmpty {
+                showOrganizerNotice = true
+            }
+        }
+        .alert(PhotoNotice.organizerTitle, isPresented: $showOrganizerNotice) {
+            Button("OK") { }
+        } message: {
+            Text(PhotoNotice.organizerMessage)
+        }
         .refreshable { await load() }
         // 写真を大きく表示
         .sheet(item: Binding(
