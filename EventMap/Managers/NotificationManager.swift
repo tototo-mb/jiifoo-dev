@@ -72,7 +72,19 @@ static func scheduleGathering(id: UUID,
         try? await UNUserNotificationCenter.current().add(request)
     }
 
+    // 写真が出ている画面でスクリーンショットが撮られたときの注意
+    static func notifyScreenshotWarning() async {
+        let content = UNMutableNotificationContent()
+        content.title = "スクリーンショットが撮影されました"
+        content.body = "写っている人の気持ちを考えて、写真の保存や共有はひかえてください"
+        content.sound = .default
 
+        // 同じ名前にして、続けて撮られても通知が何個も並ばないようにする
+        let request = UNNotificationRequest(identifier: "screenshot-warning",
+                                            content: content,
+                                            trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
 
     //ログアウトした時用
     //予約を全部消す
