@@ -171,6 +171,9 @@ struct EventDetailView: View {
                     publicPhotosReloadID = UUID()   // 非公開にしたら一覧を読み直す
                 }
             }
+            .sheet(isPresented: $showEditEvent) {
+                EditEventView(event: event)
+            }
 
             .sensoryFeedback(.success, trigger: isJoined)
             // 予約結果やエラーのお知らせ(シート表示中はこちらで出す)
