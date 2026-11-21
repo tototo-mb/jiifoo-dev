@@ -354,6 +354,10 @@ struct EventMapView: View {
                     if context.camera.pitch < 1 {
                         measureGroundScale(proxy: proxy, distance: context.camera.distance)
                     }
+                                        // 高さに合わせてピンの大きさを変える(動かし終わったときだけ。ふわっと)
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        pinScale = Self.pinScale(for: context.camera.distance)
+                    }
             }
             .ignoresSafeArea()
         }
