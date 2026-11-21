@@ -29,10 +29,12 @@ struct StoredPhotoView: View {
                 .foregroundStyle(.secondary)
                 .padding(4)
             } else if let image {                
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: contentMode)
-            } else if failed {
+                ZStack {
+                    // スクショにはこちらが写る(本物の写真は写らない)
+                    ScreenshotPlaceholder()
+                    ScreenshotProtectedImage(image: image)
+                }
+                .aspectRatio(image.size, contentMode: contentMode)            } else if failed {
                 Image(systemName: "photo")
                     .font(.title2)
                     .foregroundStyle(.secondary)
