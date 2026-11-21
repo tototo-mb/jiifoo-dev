@@ -14,6 +14,7 @@ struct GatheringView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
     @Environment(GatheringMode.self) private var gathering //今集合モード中か
+    @AppStorage("showGatheringEffect") private var showGatheringEffect = true   // 集合モードの光を出すか
 
     @State private var members: [GatheringMember] = []
     @State private var myStatus: String
@@ -124,9 +125,9 @@ struct GatheringView: View {
             .navigationTitle(event.title)
             // 画面のふちの光を付ける
             .overlay {
-                if gathering.isActive {
+                if gathering.isActive && showGatheringEffect {                    
                     ScreenEdgeGlowView(rhythmHaptics: false)
-                        .transition(.opacity)
+                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.4), value: gathering.isActive)

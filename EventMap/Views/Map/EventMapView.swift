@@ -11,6 +11,7 @@ struct EventMapView: View {
     @Environment(AuthManager.self) private var authManager
     // 設定画面の「参加できる範囲を表示」と同じ名前で読む
     @AppStorage("showJoinableRange") private var showJoinableRange = true
+        @AppStorage("showGatheringEffect") private var showGatheringEffect = true   // 集合モードの光と振動を出すか
 
 
     // 追従は MapKit 標準の .userLocation を使わず、自分でカメラを動かして行う
@@ -56,8 +57,8 @@ struct EventMapView: View {
         .gatheringModeOverlay()
         //途中参加型イベントに参加し、初めてイベント開催地に到着した場合
         .overlay {
-            if eventStore.arrivalEffectEvent != nil {
-                ScreenEdgeGlowView()
+        if eventStore.arrivalEffectEvent != nil && showGatheringEffect { 
+                    ScreenEdgeGlowView()
                     .transition(.opacity)
             }
         }

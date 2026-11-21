@@ -58,11 +58,12 @@ final class GatheringMode {
 private struct GatheringModeOverlay: ViewModifier {
     @Environment(GatheringMode.self) private var gathering
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("showGatheringEffect") private var showGatheringEffect = true   // 設定で演出をオフにできる
 
     func body(content: Content) -> some View {
         content
             // 画面のふちの光
-            .screenEdgeGlow(gathering.isActive)
+            .screenEdgeGlow(gathering.isActive && showGatheringEffect)            
             // 上部中央のカウントダウン
             .overlay(alignment: .top) {
                 if let meetTime = gathering.meetTime {
