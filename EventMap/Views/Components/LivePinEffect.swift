@@ -19,7 +19,7 @@ struct LivePinEffect: ViewModifier {
             // 上の「LIVE」
             .overlay(alignment: .top) {
                 if isLive {
-                    Text("LIVE")
+                    Text("開催中！！！")
                         .font(.system(size: 9, weight: .heavy))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
