@@ -83,6 +83,7 @@ struct NearbyEventListView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("付近のイベント")
             .searchable(text: $searchText, prompt: "イベント名・場所で検索")
+            .keyboardCloseButton()
             //範囲が変わった時、現在地が変わった時に読み込む
             .task(id: loadKey) {
                 await loadEvents()

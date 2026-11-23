@@ -44,6 +44,7 @@ var body: some View{
         }
     }
         .navigationTitle("法人として申請")
+        .keyboardCloseButton()
         .navigationBarTitleDisplayMode(.inline)
         .alert(message ?? "", isPresented: Binding(
             get: { message != nil},

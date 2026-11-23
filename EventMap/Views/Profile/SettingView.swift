@@ -15,6 +15,10 @@ struct SettingsView: View {
     // EventMapApp でも同じ名前で読んで、アプリ全体に反映している
     @AppStorage("appearance") private var appearance = 0
 
+    // 集合モードの光と振動を出すか(通知・カウントダウンはオフでも出る)
+    // EventMapView・GatheringView・GroupModeUI でも同じ名前で読んでいる
+    @AppStorage("showGatheringEffect") private var showGatheringEffect = true
+
     @State private var email: String?
     @State private var showLogoutDialog = false
     @State private var organizations: [MyOrganization] = [] //自身が所属している法人
@@ -58,6 +62,17 @@ struct SettingsView: View {
                     Text("マップの表示")
                 } footer: {
                     Text("マップに、現在地から\(Int(LocationManager.joinableRadius))m(参加できる範囲)の円を表示します。")
+                }
+
+                // ---- 集合モード ----
+                Section {
+                    Toggle(isOn: $showGatheringEffect) {
+                        Label("光と振動の演出", systemImage: "sparkles")
+                    }
+                } header: {
+                    Text("集合モード")
+                } footer: {
+                    Text("オフにすると、集合モードや会場に着いたときに、画面のふちが光ったり振動したりしなくなります。通知とカウントダウンはそのまま表示されます。")
                 }
 
                 // ---- アプリの表示 ----

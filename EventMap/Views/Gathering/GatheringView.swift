@@ -14,6 +14,7 @@ struct GatheringView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
     @Environment(GatheringMode.self) private var gathering //今集合モード中か
+    @AppStorage("showGatheringEffect") private var showGatheringEffect = true   // 集合モードの光を出すか
 
     @State private var members: [GatheringMember] = []
     @State private var myStatus: String
@@ -23,9 +24,11 @@ struct GatheringView: View {
     @State private var isEnded = false //集合モードが終わったか
     @State private var isCreator = false //自分が主催者か
     @State private var isEnding = false //終了の処理中か
+    @State private var showEndConfirm = false //集合モードを終了する前の確認
     @State private var myUserID: UUID?
     @State private var showArrivalChoice = false //「写真を撮る/撮らない」の選択を出すか
     @State private var showCamera = false
+    @State private var showCameraNotice = false   // 撮影前の注意(このイベントで初めてのとき)
     @State private var photoUserIDs: Set<UUID> = [] //到着時の写真を撮った人
     @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
@@ -123,9 +126,9 @@ struct GatheringView: View {
             .navigationTitle(event.title)
             // 画面のふちの光を付ける
             .overlay {
-                if gathering.isActive {
+                if gathering.isActive && showGatheringEffect {                    
                     ScreenEdgeGlowView(rhythmHaptics: false)
-                        .transition(.opacity)
+                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.4), value: gathering.isActive)
@@ -191,10 +194,26 @@ struct GatheringView: View {
             .confirmationDialog("到着を記録します",
                                 isPresented: $showArrivalChoice,
                                 titleVisibility: .visible) {
-                Button("写真を撮って到着する") { showCamera = true }
-                Button("写真なしで到着する") { checkIn() }
+            Button("写真を撮って到着する") { openCamera() }                
+            Button("写真なしで到着する") { checkIn() }
             } message: {
                 Text("写真は主催者と参加者だけが見られます")
+            }
+            // 集合モードを終了する前の確認
+            .alert("集合モードを終了しますか？", isPresented: $showEndConfirm) {
+                Button("終了する", role: .destructive) { endGathering() }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("参加者全員の集合モードも終わります。終了すると元に戻せません。")
+            }
+            // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
+            .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
+                Button("OK") {
+                    PhotoNotice.markCameraNoticeSeen(eventID: event.id)
+                    showCamera = true
+                }
+            } message: {
+                Text(PhotoNotice.cameraMessage)
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image in
@@ -258,6 +277,16 @@ struct GatheringView: View {
         }
     }
 
+    // カメラを開く(このイベントで初めてなら、先に注意を出す)
+    private func openCamera() {
+        if PhotoNotice.hasSeenCameraNotice(eventID: event.id) {
+            showCamera = true
+        } else {
+            showCameraNotice = true
+        }
+    }
+
+
     // MARK: - 到着ボタン
 
     @ViewBuilder
@@ -287,8 +316,7 @@ struct GatheringView: View {
             .disabled(isCheckedIn || !isNear || isCheckingIn)
             if isCreator {
                 Button("集合モードを終了する"){
-                    endGathering()
-                }
+                    showEndConfirm = true                }
                 .disabled(!allArrived || isEnding)
                 if !allArrived {
                     Text("制限時間より前に全員の集合が確認できた場合のみ可能")

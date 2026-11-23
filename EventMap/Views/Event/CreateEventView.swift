@@ -8,6 +8,12 @@ struct CreateEventView: View {
 
     // 作成に成功したときに呼ばれる(呼び出し側でマップへ戻す)
     var onCreated: (() -> Void)? = nil
+    // 入力途中か(タブを移るときに MainTabView が確かめる)
+    @Binding var hasInput: Bool
+    // 移ろうとしているタブ(入ると「下書きをどうするか」を聞く)
+    @Binding var leaveTo: Int?
+    // 聞き終わって、タブを移ってよいときに呼ぶ
+    var onLeave: (Int) -> Void = { _ in }
 
     @State private var title = ""
     @State private var category = ""
@@ -16,6 +22,8 @@ struct CreateEventView: View {
     @State private var startsAt = Date().addingTimeInterval(30 * 60)
     @State private var capacity = 3
     @State private var isSaving = false
+    @State private var showCreateConfirm = false   // 作成前の確認
+    @State private var showDraftQuestion = false   // 「下書きの続きから書きますか？」
     @State private var hasCapacityLimit = true
     @State private var joinType: JoinType = .fixed //イベントタイプ（合コン型orお祭り型）
     @State private var durationHours = 2 //お祭り型の開催時間の初期値
@@ -42,7 +50,7 @@ struct CreateEventView: View {
                 Section("イベント") {
                     TextField("イベント名", text: $title)
                     TextField("コメント", text: $description, axis: .vertical)
-                }
+                }         
 
                 //法人のイベントタイプの選択が可能（個人で開催する場合は時間厳守タイプのみ）
                 if authManager.isCorporate{
@@ -63,7 +71,6 @@ struct CreateEventView: View {
                 Section("集合") {
                     // 表示用の名前だけ入力する（検索は下の欄で行う）
                     TextField("集合場所（例：渋谷駅　ハチ公前）", text: $placeName)
-
                     DatePicker("開始時刻", selection: $startsAt,
                                in: startsAtRange,
                                displayedComponents: [.date, .hourAndMinute])
@@ -150,9 +157,63 @@ struct CreateEventView: View {
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("作成") { save() }
+                    Button("作成") { showCreateConfirm = true }
                         .disabled(title.isEmpty || placeName.isEmpty || isSaving)
                 }
+            }
+            //キーボードの閉じるボタン
+            .keyboardCloseButton() 
+            // 入力途中かを MainTabView に知らせる
+            .onChange(of: formHasInput, initial: true) { _, newValue in
+                hasInput = newValue
+            }
+            // 開いたとき、入力が空で下書きがあれば、続きから書くか聞く
+            .onAppear {
+                if !formHasInput && EventDraft.load() != nil {
+                    showDraftQuestion = true
+                }
+            }
+            .alert("下書きがあります", isPresented: $showDraftQuestion) {
+                Button("続きから書く") { restoreDraft() }
+                Button("新しく作る", role: .destructive) { EventDraft.delete() }
+            } message: {
+                Text("前回作成途中だったイベントの続きから書きますか？")
+            }
+            // 入力途中でほかのタブへ移ろうとしたとき
+            .confirmationDialog("作成途中のイベントがあります",
+                                isPresented: Binding(
+                                    get: { leaveTo != nil },
+                                    set: { if !$0 { leaveTo = nil } }),
+                                titleVisibility: .visible,
+                                presenting: leaveTo) { tab in
+                Button("下書きに保存する") {
+                    saveDraft()
+                    resetForm()
+                    leaveTo = nil
+                    onLeave(tab)
+                }
+                Button("削除する", role: .destructive) {
+                    EventDraft.delete()
+                    resetForm()
+                    leaveTo = nil
+                    onLeave(tab)
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: { _ in
+                Text("下書きに保存すると、次にこの画面を開いたときに続きから書けます。")
+            }
+            // 作成前の確認(内容をもう一度見せる)
+            .alert("この内容で作成しますか？", isPresented: $showCreateConfirm) {
+                Button("作成する") { save() }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("""
+                \(title)
+                \(startsAt.formatted(date: .abbreviated, time: .shortened)) 開始
+                集合場所：\(placeName)
+
+                作成したあとは、イベントタイプ・募集人数・開始時刻を変更できません。
+                """)
             }
             .alert(eventStore.message ?? "", isPresented: Binding(
                 get: { eventStore.message != nil },
@@ -223,10 +284,55 @@ struct CreateEventView: View {
             isSaving = false
             // 成功したら入力を空に戻して、マップへ戻る(失敗時はアラートが出て画面はそのまま)
             if success {
+                EventDraft.delete()   // 作成できたら下書きは捨てる 
                 resetForm()
                 onCreated?()
             }
         }
+    }
+
+        // MARK: - 下書き
+
+    // 何か入力しているか(何もなければ、下書きのことは聞かない)
+    private var formHasInput: Bool {
+        !title.isEmpty || !description.isEmpty || !placeName.isEmpty || pickedCoordinate != nil
+    }
+
+    // 今の入力を下書きに保存する
+    private func saveDraft() {
+        EventDraft(title: title,
+                   description: description,
+                   placeName: placeName,
+                   startsAt: startsAt,
+                   hasCapacityLimit: hasCapacityLimit,
+                   capacity: capacity,
+                   joinType: joinType,
+                   durationHours: durationHours,
+                   photoEndsAt: photoEndsAt,
+                   latitude: pickedCoordinate?.latitude,
+                   longitude: pickedCoordinate?.longitude)
+            .save()
+    }
+
+    // 下書きを入力欄に戻す
+    private func restoreDraft() {
+        guard let draft = EventDraft.load() else { return }
+        title = draft.title
+        description = draft.description
+        placeName = draft.placeName
+        hasCapacityLimit = draft.hasCapacityLimit
+        capacity = draft.capacity
+        joinType = draft.joinType
+        durationHours = draft.durationHours
+        pickedCoordinate = draft.coordinate
+        // 開始時刻が、もう選べない時刻になっていたら30分後に戻す
+        startsAt = startsAtRange.contains(draft.startsAt)
+            ? draft.startsAt
+            : Date().addingTimeInterval(30 * 60)
+        // 撮影終了も、開始時刻に合わなければ開始の1時間後に戻す
+        photoEndsAt = photoEndsAtRange.contains(draft.photoEndsAt)
+            ? draft.photoEndsAt
+            : startsAt.addingTimeInterval(60 * 60)
     }
 
     // 入力内容を初期状態に戻す
@@ -275,9 +381,8 @@ struct CreateEventView: View {
 }
 
 #Preview {
-    CreateEventView()
+    CreateEventView(hasInput: .constant(false), leaveTo: .constant(nil))
         .environment(EventStore())
         .environment(LocationManager())
         .environment(AuthManager())
 }
-

@@ -11,6 +11,7 @@ struct EventMapView: View {
     @Environment(AuthManager.self) private var authManager
     // 設定画面の「参加できる範囲を表示」と同じ名前で読む
     @AppStorage("showJoinableRange") private var showJoinableRange = true
+        @AppStorage("showGatheringEffect") private var showGatheringEffect = true   // 集合モードの光と振動を出すか
 
 
     // 追従は MapKit 標準の .userLocation を使わず、自分でカメラを動かして行う
@@ -28,8 +29,7 @@ struct EventMapView: View {
     @State private var isReturningHome = false          // 現在地へ戻っている最中
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
-    @State private var mapProxy: MapProxy?              // 画面の位置 ⇔ 地図の座標の変換用
-    @State private var measuredOffset: Double?          // 実際の画面で測ったずらし量(m)
+    @State private var groundScale: Double?             // 真上から見たとき「画面1ポイント÷カメラの高さ」が地面の何mか
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
@@ -57,8 +57,8 @@ struct EventMapView: View {
         .gatheringModeOverlay()
         //途中参加型イベントに参加し、初めてイベント開催地に到着した場合
         .overlay {
-            if eventStore.arrivalEffectEvent != nil {
-                ScreenEdgeGlowView()
+        if eventStore.arrivalEffectEvent != nil && showGatheringEffect { 
+                    ScreenEdgeGlowView()
                     .transition(.opacity)
             }
         }
@@ -351,13 +351,16 @@ struct EventMapView: View {
                                     ])))            
                 .onMapCameraChange(frequency: .onEnd) { context in
                     lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
-                    // 高さに合わせてピンの大きさを変える(動かし終わったときだけ。ふわっと)
+                    // 真上から見ているときに、画面と地面の縮尺を測っておく(ピンへのズームで使う)
+                    if context.camera.pitch < 1 {
+                        measureGroundScale(proxy: proxy, distance: context.camera.distance)
+                    }
+                                        // 高さに合わせてピンの大きさを変える(動かし終わったときだけ。ふわっと)
                     withAnimation(.easeOut(duration: 0.25)) {
                         pinScale = Self.pinScale(for: context.camera.distance)
                     }
             }
             .ignoresSafeArea()
-            .onAppear { mapProxy = proxy }
         }
     }
 
@@ -584,34 +587,33 @@ struct EventMapView: View {
         cameraTask?.cancel()   // 前の動きを止める
         isReturningHome = false
         let heading = lastCamera?.heading ?? 0   // 今の向きのまま
-        
-        cameraTask = Task { @MainActor in
-            withAnimation(.easeInOut(duration: 1.5)) {
-                cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
-            }
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-
-            // 11/13 実際の画面で位置を計算して、ピンが上から1/4に来るよう調整
-            if let proxy = mapProxy {
-                let screen = UIScreen.main.bounds.size
-                let target = CGPoint(x: screen.width / 2, y: screen.height * pinScreenRatio)
-                if let ground = proxy.convert(target, from: .global) {
-                    let forward = forwardMeters(from: event.coordinate, to: ground, heading: heading)
-                    //20m以上ズレている時のみ修正
-                    if abs(forward) > 20{
-                        measuredOffset = currentOffset + forward
-                        withAnimation(.easeInOut(duration: 0.6)) {
-                            cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
-                        }
-                    }
-                }
-            }
+        withAnimation(.easeInOut(duration: 1.5)) {
+            cameraPosition = .camera(zoomCamera(around: event.coordinate, heading: heading))
         }
     }
 
-    // 今のずらし量（測る前は仮の値）
-    private var currentOffset: Double { measuredOffset ?? 200 }
+    // ピンを上から1/4に置くための、中心のずらし量(m)
+    // 画面の真ん中から上1/4の位置までのポイント数 × 1ポイントあたりの地面の長さ
+    // (まだ測れていないときは仮の値 200m)
+    private var currentOffset: Double {
+        guard let groundScale else { return 200 }
+        let points = Double(UIScreen.main.bounds.height * (0.5 - pinScreenRatio))
+        return points * groundScale * zoomDistance
+    }
+
+    // 画面の真ん中と、その100ポイント下が、地面で何m離れているかを測る
+    // カメラの高さで割っておけば、どの高さでも使える(真上から見たとき、地面の縮尺は高さに比例する)
+    private func measureGroundScale(proxy: MapProxy, distance: Double) {
+        let screen = UIScreen.main.bounds
+        let center = CGPoint(x: screen.midX, y: screen.midY)
+        let below = CGPoint(x: screen.midX, y: screen.midY + 100)
+        guard distance > 0,
+              let a = proxy.convert(center, from: .global),
+              let b = proxy.convert(below, from: .global) else { return }
+        let meters = CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+        groundScale = meters / 100 / distance
+    }
 
     // ピンが画面の上側に見えるカメラを作る（向いている方向の手前へ中心をずらす）
     private func zoomCamera(around coordinate: CLLocationCoordinate2D, heading: Double) -> MapCamera {
@@ -624,14 +626,6 @@ struct EventMapView: View {
                          distance: zoomDistance,
                          heading: heading,
                          pitch: 0)   // 0 = 真上から見る(2D)
-    }
-
-    // from から to が、向いている方向に何m先にあるか
-    private func forwardMeters(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, heading: Double) -> Double {
-        let north = (to.latitude - from.latitude) * 111_000
-        let east = (to.longitude - from.longitude) * 111_000 * cos(from.latitude * .pi / 180)
-        let rad = heading * .pi / 180
-        return north * cos(rad) + east * sin(rad)
     }
 
     // 詳細を閉じたとき：ピンを押す前のカメラへ戻る
