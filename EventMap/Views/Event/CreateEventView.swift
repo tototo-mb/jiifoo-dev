@@ -16,6 +16,7 @@ struct CreateEventView: View {
     @State private var startsAt = Date().addingTimeInterval(30 * 60)
     @State private var capacity = 3
     @State private var isSaving = false
+    @State private var showCreateConfirm = false   // 作成前の確認
     @State private var hasCapacityLimit = true
     @State private var joinType: JoinType = .fixed //イベントタイプ（合コン型orお祭り型）
     @State private var durationHours = 2 //お祭り型の開催時間の初期値
@@ -42,7 +43,7 @@ struct CreateEventView: View {
                 Section("イベント") {
                     TextField("イベント名", text: $title)
                     TextField("コメント", text: $description, axis: .vertical)
-                }
+                }         
 
                 //法人のイベントタイプの選択が可能（個人で開催する場合は時間厳守タイプのみ）
                 if authManager.isCorporate{
@@ -63,7 +64,6 @@ struct CreateEventView: View {
                 Section("集合") {
                     // 表示用の名前だけ入力する（検索は下の欄で行う）
                     TextField("集合場所（例：渋谷駅　ハチ公前）", text: $placeName)
-
                     DatePicker("開始時刻", selection: $startsAt,
                                in: startsAtRange,
                                displayedComponents: [.date, .hourAndMinute])
@@ -150,9 +150,23 @@ struct CreateEventView: View {
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("作成") { save() }
+                    Button("作成") { showCreateConfirm = true }
                         .disabled(title.isEmpty || placeName.isEmpty || isSaving)
                 }
+            }
+            .keyboardCloseButton() //キーボードの閉じるボタン
+            // 作成前の確認(内容をもう一度見せる)
+            .alert("この内容で作成しますか？", isPresented: $showCreateConfirm) {
+                Button("作成する") { save() }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("""
+                \(title)
+                \(startsAt.formatted(date: .abbreviated, time: .shortened)) 開始
+                集合場所：\(placeName)
+
+                作成したあとは、イベントタイプ・募集人数・開始時刻を変更できません。
+                """)
             }
             .alert(eventStore.message ?? "", isPresented: Binding(
                 get: { eventStore.message != nil },

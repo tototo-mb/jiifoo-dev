@@ -41,6 +41,7 @@ struct LoginView:View{
             .disabled(isBusy)
         }
         .padding()
+        .keyboardCloseButton()
     }
     private func submit(){
         Task{

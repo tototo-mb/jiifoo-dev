@@ -19,6 +19,8 @@ struct MemoryCameraView: View {
     @State private var showCameraNotice = false //撮影前の注意喚起(参加したイベントで初めてカメラを起動する時)
     @State private var retakingPath: String?             // 撮り直す写真(nil なら新しく撮る)
     @State private var selectedPath: String?             // 押した写真(撮り直し・削除を選ぶ)
+    @State private var deletingPath: String?             // 削除してよいか確認中の写真
+    @State private var publishingPath: String?           // 公開してよいか確認中の写真
     @State private var message: String?
     
     // 会場の広さ(サーバーの reserve_photo_slot と同じ)
@@ -126,12 +128,16 @@ struct MemoryCameraView: View {
                         }
                         if event.joinType == .dropIn {
                             Button(publicPaths.contains(path) ? "公開をやめる" : "みんなに公開") {
-                                togglePublic(path)
+                                if publicPaths.contains(path) {
+                                    togglePublic(path)       // 公開をやめるときは確認しない
+                                } else {
+                                    publishingPath = path    // 公開するときは、もう一度確認する
+                                }
                             }
                         }
                         
                         Button("削除する", role: .destructive) {
-                            delete(path)
+                            deletingPath = path   // すぐには消さず、もう一度確認する
                         }
                     } message: {_ in
                         if event.joinType == .dropIn {
@@ -143,6 +149,30 @@ struct MemoryCameraView: View {
                             save(image)
                         }
                         .ignoresSafeArea()
+                    }
+                    // 公開の確認(ほかの人に見えるようになるため)
+                    .alert("この写真を公開しますか？", isPresented: Binding(
+                        get: { publishingPath != nil },
+                        set: { if !$0 { publishingPath = nil } }
+                    ), presenting: publishingPath) { path in
+                        Button("公開する") {
+                            togglePublic(path)
+                        }
+                        Button("キャンセル", role: .cancel) { }
+                    } message: { _ in
+                        Text("開催中は、このイベントを見た人がこの写真を見られるようになります。公開はあとからやめられます。")
+                    }
+                    // 削除の最終確認(消した写真は元に戻せないため)
+                    .alert("この写真を削除しますか？", isPresented: Binding(
+                        get: { deletingPath != nil },
+                        set: { if !$0 { deletingPath = nil } }
+                    ), presenting: deletingPath) { path in
+                        Button("削除する", role: .destructive) {
+                            delete(path)
+                        }
+                        Button("キャンセル", role: .cancel) { }
+                    } message: { _ in
+                        Text("削除した写真は元に戻せません。")
                     }
                     // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
                     .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
@@ -256,7 +286,7 @@ struct MemoryCameraView: View {
                         publicPaths.remove(path)
                     } catch {
                         message = "写真を削除できませんでした"
-                        print("思い出の写真の削除に失敗:", error)
+                        print("写真の削除に失敗:", error)
                     }
                     isSaving = false
                 }

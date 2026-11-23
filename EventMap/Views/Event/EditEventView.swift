@@ -17,6 +17,7 @@ struct EditEventView: View {
     @State private var cameraPosition: MapCameraPosition
     @State private var showPlacePicker = false
     @State private var isSaving = false
+    @State private var showSaveConfirm = false   // 保存前の確認
     @State private var errorMessage: String?
 
     init(event: Event) {
@@ -78,7 +79,7 @@ struct EditEventView: View {
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button("保存") { showSaveConfirm = true }
                         .disabled(!canSave)
                 }
             }
@@ -92,6 +93,16 @@ struct EditEventView: View {
                     cameraPosition = .region(MKCoordinateRegion(
                         center: pickedCoordinate, latitudinalMeters: 500, longitudinalMeters: 500))
                 }
+            }
+            .keyboardCloseButton()
+            // 保存前の確認(場所を変えたときは、参加者にお知らせが届くことも伝える)
+            .alert("変更を保存しますか？", isPresented: $showSaveConfirm) {
+                Button("保存する") { save() }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text(isPlaceChanged
+                     ? "集合場所が変わるので、参加者にお知らせが届きます。"
+                     : "参加者には新しい内容が表示されます。")
             }
             .alert(errorMessage ?? "", isPresented: Binding(
                 get: { errorMessage != nil },

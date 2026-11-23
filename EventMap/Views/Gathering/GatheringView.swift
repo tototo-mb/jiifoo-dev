@@ -24,6 +24,7 @@ struct GatheringView: View {
     @State private var isEnded = false //集合モードが終わったか
     @State private var isCreator = false //自分が主催者か
     @State private var isEnding = false //終了の処理中か
+    @State private var showEndConfirm = false //集合モードを終了する前の確認
     @State private var myUserID: UUID?
     @State private var showArrivalChoice = false //「写真を撮る/撮らない」の選択を出すか
     @State private var showCamera = false
@@ -198,6 +199,13 @@ struct GatheringView: View {
             } message: {
                 Text("写真は主催者と参加者だけが見られます")
             }
+            // 集合モードを終了する前の確認
+            .alert("集合モードを終了しますか？", isPresented: $showEndConfirm) {
+                Button("終了する", role: .destructive) { endGathering() }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("参加者全員の集合モードも終わります。終了すると元に戻せません。")
+            }
             // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
             .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
                 Button("OK") {
@@ -308,8 +316,7 @@ struct GatheringView: View {
             .disabled(isCheckedIn || !isNear || isCheckingIn)
             if isCreator {
                 Button("集合モードを終了する"){
-                    endGathering()
-                }
+                    showEndConfirm = true                }
                 .disabled(!allArrived || isEnding)
                 if !allArrived {
                     Text("制限時間より前に全員の集合が確認できた場合のみ可能")
