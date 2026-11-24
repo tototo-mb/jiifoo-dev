@@ -439,6 +439,20 @@ final class EventStore {
         }
     }
 
+    // 地図に出ているイベントのどれかの状態が次に変わる時刻(地図を自動で読み直すのに使う)
+    //   ・時間厳守型が集合モードに入る時刻(開始5分前)
+    //   ・開始時刻
+    var nextEventStart: Date? {
+        events
+            .flatMap { event -> [Date] in
+                event.joinType == .fixed
+                    ? [event.startsAt.addingTimeInterval(-5 * 60), event.startsAt]
+                    : [event.startsAt]
+            }
+            .filter { $0 > .now }
+            .min()
+    }
+
     // 次に集合モードが始まる時刻(参加予定の時間厳守型イベントのうち、一番早いもの)
     var nextGatheringStart: Date? {
         joinedEvents

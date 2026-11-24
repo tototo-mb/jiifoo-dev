@@ -233,6 +233,18 @@ struct EventMapView: View {
             await checkGathering()
         }
 
+        // 地図に出ているイベントのどれかが集合モードに入る時刻(時間厳守型の開始5分前)や
+        // 開始時刻になったら、地図を自動で読み直す
+        // (募集の締め切り・開始前の炎 → 開催中の炎 などの表示を最新にするため)
+        // 読み直すと次に始まるイベントの時刻に変わるので、また待ち直す
+        .task(id: eventStore.nextEventStart) {
+            guard let start = eventStore.nextEventStart else { return }
+            let wait = start.timeIntervalSinceNow + 1   // サーバーと時計が少しずれても大丈夫なように1秒待つ
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled else { return }
+            await eventStore.reload()
+        }
+
         // 集合中のイベントがあれば、画面の上にバナーを出す
         .safeAreaInset(edge: .top) {
             VStack(spacing: 8) {
