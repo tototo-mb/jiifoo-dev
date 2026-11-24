@@ -32,7 +32,7 @@ struct MapArrivalButton: View {
                 } else {
                     Image(systemName: "mappin.and.ellipse")
                 }
-                Text("到着しました")
+                Text("チェックイン")
             }
             .font(.headline)
             .foregroundStyle(.white)
@@ -47,8 +47,8 @@ struct MapArrivalButton: View {
         .confirmationDialog("到着を記録します",
                             isPresented: $showArrivalChoice,
                             titleVisibility: .visible) {
-            Button("写真を撮って到着する") { openCamera() }
-            Button("写真なしで到着する") { checkIn() }
+            Button("写真を撮ってチェックインする") { openCamera() }
+            Button("写真なしでチェックインする") { checkIn() }
         } message: {
             Text("写真は主催者と参加者だけが見られます")
         }

@@ -36,6 +36,7 @@ struct EventMapView: View {
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
     @State private var openedPhotoEvent: PhotoEvent?     // 開いている撮影画面
     @State private var showFilter = false               // フィルター画面を表示中か
+    @State private var showNearbyList = false           // 近くのイベント一覧を表示中か    
     @State private var openedCluster: EventCluster?     // 一覧を開いている、まとめたピン
     @State private var clusterPickedEvent: Event?       // 一覧で選んだイベント(一覧を閉じたら詳細を開く)
 
@@ -133,7 +134,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter},
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter && !showNearbyList},
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -180,6 +181,12 @@ struct EventMapView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        // 近くのイベント一覧(800m圏内)
+        .sheet(isPresented: $showNearbyList) {
+            NearbyEventListView()
+                .environment(eventStore)
+                .environment(locationManager)
+        }
         // フィルター画面
         .sheet(isPresented: $showFilter) {
             EventFilterView()
@@ -208,6 +215,7 @@ struct EventMapView: View {
         .onChange(of: eventStore.focusedEvent?.id) {
             if let event = eventStore.focusedEvent {
                 showFarEvents = false 
+                showNearbyList = false //一覧から「マップで場所を見る」を押した時も閉じる
                 moveToFocusedEvent(event)
             }
         }
@@ -246,7 +254,7 @@ struct EventMapView: View {
         }
 
         // 集合中のイベントがあれば、画面の上にバナーを出す
-        .safeAreaInset(edge: .top) {
+        /*.safeAreaInset(edge: .top) {
             VStack(spacing: 8) {
                 if let gatheringEvent {
                     gatheringBanner(for: gatheringEvent)
@@ -256,7 +264,8 @@ struct EventMapView: View {
                     photoBanner(for: photoEvent)
                 }
             }
-        }
+        }*/
+
         // 撮影画面
         .sheet(item: $openedPhotoEvent) { event in
             MemoryCameraView(event: event)
@@ -442,36 +451,25 @@ struct EventMapView: View {
     // 右下のボタン（フィルター・再読み込み・イベント作成・現在地）
     private var controlButtons: some View {
         VStack(spacing: 12) {
-            // フィルターボタン
-            // 絞り込み中は塗りつぶしのアイコンにする
-            circleButton(systemName: eventStore.filter.isActive
-                         ? "line.3.horizontal.decrease.circle.fill"
-                         : "line.3.horizontal.decrease") {
-                showFilter = true
-            }
-
-            // 再読み込みボタン
-            circleButton(systemName: "arrow.clockwise") {
-                if let userLocation = locationManager.userLocation {
-                    Task { await eventStore.load(near: userLocation, force: true) }
+            // 集合モード中だけ:集合モード画面を開く
+            if let gatheringEvent {
+                colorCircleButton(systemName: "flame.fill", color: .orange) {
+                    openedGathering = gatheringEvent
                 }
+                .accessibilityLabel("集合モード")
             }
 
-            // イベント作成ボタン
-            /*
-            circleButton(systemName: "plus") {
-                showCreateEvent = true
+            // 思い出の写真を撮れる時間だけ:撮影画面を開く(会場の外では灰色)
+            if let photoEvent = photoEvents.first {
+                colorCircleButton(systemName: "camera.fill",
+                                  color: isInVenue(photoEvent) ? .blue : .gray) {
+                    openedPhotoEvent = photoEvent
+                }
+                                .accessibilityLabel("思い出カメラ")
             }
-            .disabled(locationManager.userLocation == nil)   // 現在地がわかるまで押せない
-            */
+            // メニュー(絞り込み・再読み込み・全国のイベント)
+            menuButton
 
-            //各地のイベントをマップで読み込み
-            circleButton(systemName: "globe.asia.australia") {
-                showFarEvents = true
-            }
-
-            
-            
             // 現在地ボタン
             circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
                 backTo2D()
@@ -480,6 +478,73 @@ struct EventMapView: View {
         }
         .padding(.trailing, 16)
         .padding(.bottom, 24)
+    }
+
+    // メニューのボタン(押すと、絞り込み・再読み込み・全国のイベントを選べる)
+    private var menuButton: some View {
+        Menu {
+            Button {
+                showNearbyList = true
+            } label: {
+                Label("近くのイベント一覧", systemImage: "list.bullet")
+            }
+            Button {
+                showFarEvents = true
+            } label: {
+                Label("全国のイベント", systemImage: "globe.asia.australia")
+            }
+            Divider()
+            Button {
+                showFilter = true
+            } label: {
+                Label(eventStore.filter.isActive ? "絞り込み(使用中)" : "絞り込み",
+                      systemImage: "line.3.horizontal.decrease")
+            }
+            Button {
+                if let userLocation = locationManager.userLocation {
+                    Task { await eventStore.load(near: userLocation, force: true) }
+                }
+            } label: {
+                Label("再読み込み", systemImage: "arrow.clockwise")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 50, height: 50)
+                .background(.regularMaterial, in: Circle())
+                // 絞り込み中は、右上にオレンジの点
+                .overlay(alignment: .topTrailing) {
+                    if eventStore.filter.isActive {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 12, height: 12)
+                            .offset(x: -2, y: 2)
+                    }
+                }
+                .shadow(radius: 3)
+        }
+        .accessibilityLabel("メニュー")
+    }
+
+    // 色付きの丸いボタン(集合モード・カメラなど、その時間だけ出すもの)
+    private func colorCircleButton(systemName: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.title2)
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background(color, in: Circle())
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+                .shadow(radius: 3)
+        }
+    }
+
+    // 撮影の会場の中にいるか(カメラのボタンの色に使う)
+    private func isInVenue(_ event: PhotoEvent) -> Bool {
+        let distance = locationManager.distance(
+            to: CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude))
+        return (distance ?? .infinity) <= MemoryCameraView.venueRadius
     }
 
     // 丸いボタン1つ分の見た目
