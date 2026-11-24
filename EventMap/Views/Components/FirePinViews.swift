@@ -40,7 +40,7 @@ struct PrivatePinView:View{
     }
 }
 
-// ★ 色やサイズの設定はここを書き換えるだけ！
+// 色やサイズの設定はここを書き換える
 enum FirePinStyle {
     case normal   // 通常時
     case selected // 選択中
@@ -50,7 +50,7 @@ enum FirePinStyle {
         switch self {
         case .normal:   return 45
         case .selected: return 75
-        case .live:     return 60
+        case .live:     return 45
         }
     }
 
@@ -58,7 +58,7 @@ enum FirePinStyle {
         switch self {
         case .normal:   return 55
         case .selected: return 70
-        case .live:     return 75
+        case .live:     return 55
         }
     }
 
@@ -79,7 +79,7 @@ enum FirePinStyle {
     }
 }
 
-// ★ マップに置く炎ピン本体(fire_pin.riv。色と大きさを FirePinStyle で変えられる)
+// マップに置く炎ピン本体(fire_pin.riv。色と大きさを FirePinStyle で変えられる)
 struct FirePinView: View {
     let style: FirePinStyle
     let onTap: () -> Void

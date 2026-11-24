@@ -18,6 +18,9 @@ struct FarEventsView: View {
     @State private var searchedPlace: MKMapItem?          // 選んだ場所(地図に印を出す)
     @State private var showList = false                   // 一覧を出すか
     @State private var listSelectedEvent: Event?          // 一覧で選んだイベント(詳細を出す)
+    @State private var mapCamera: MapCamera?              // 今のカメラ(ピンをまとめるのに使う)
+    @State private var openedCluster: EventCluster?       // 一覧を開いている、まとめた点
+    @State private var clusterPickedEvent: Event?         // 一覧で選んだイベント(一覧を閉じたら詳細を開く)
 
     //startCamera:開いた時に映す場所と高さ（イベントマップと同じ）
     private let startCamera: MapCamera?
@@ -44,6 +47,9 @@ struct FarEventsView: View {
     )
     var body: some View {
         NavigationStack {
+            MapReader { proxy in
+            // 近くの点をまとめる
+            let clusters = EventCluster.make(events, camera: mapCamera, proxy: proxy, radius: 24)
             Map(position: $cameraPosition, bounds: Self.japanBounds) {
                 // 現在地(青い丸)
                 UserAnnotation()
@@ -52,11 +58,20 @@ struct FarEventsView: View {
                     Marker(item: searchedPlace)
                         .tint(.red)
                 }
-                ForEach(events) { event in
-                    Annotation(event.title, coordinate: event.coordinate) {
-                        eventDot(for: event)
+                ForEach(clusters) { cluster in
+                    if cluster.count == 1 {
+                        Annotation(cluster.events[0].title, coordinate: cluster.coordinate) {
+                            eventDot(for: cluster.events[0])
+                        }
+                        .annotationTitles(.hidden) //点の下にイベント名を出さない（イベントピン重複回避）
+                    } else {
+                        // 2つ以上なら、件数の丸(タップで一覧)
+                        Annotation("\(cluster.count)件", coordinate: cluster.coordinate) {
+                            ClusterBubble(cluster: cluster)
+                                .onTapGesture { openedCluster = cluster }
+                        }
+                        .annotationTitles(.hidden)
                     }
-                    .annotationTitles(.hidden) //点の下にイベント名を出さない（イベントピン重複回避）
                 }
             }
             //店名を非表示
@@ -64,11 +79,13 @@ struct FarEventsView: View {
             .mapControls {}
             //地図を動かし終わったら、写っている範囲のイベントを表示
             .onMapCameraChange(frequency: .onEnd) { context in 
+                mapCamera = context.camera
                 loadTask?.cancel()
                 loadTask = Task {
                     await loadEvents(in: context.region)
                 }
             }
+            } // MapReader の終わり
             .overlay {
                 if isLoading {
                     ProgressView()
@@ -151,6 +168,19 @@ struct FarEventsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("閉じる") { dismiss() }
                 }
+            }
+            // まとめた点の一覧(選んだら、一覧を閉じてから詳細を開く)
+            .sheet(item: $openedCluster, onDismiss: {
+                if let event = clusterPickedEvent {
+                    clusterPickedEvent = nil
+                    selectedEvent = event
+                }
+            }) { cluster in
+                ClusterListView(events: cluster.events) { event in
+                    clusterPickedEvent = event
+                    openedCluster = nil
+                }
+                .presentationDetents([.medium, .large])
             }
             .sheet(item: $selectedEvent) { event in
                 EventDetailView(event: event, showMapButton: true)
