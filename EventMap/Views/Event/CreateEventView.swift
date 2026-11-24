@@ -161,8 +161,6 @@ struct CreateEventView: View {
                         .disabled(title.isEmpty || placeName.isEmpty || isSaving)
                 }
             }
-            //キーボードの閉じるボタン
-            .keyboardCloseButton() 
             // 入力途中かを MainTabView に知らせる
             .onChange(of: formHasInput, initial: true) { _, newValue in
                 hasInput = newValue

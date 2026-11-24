@@ -7,6 +7,7 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var createHasInput = false   // イベント作成タブに入力途中のものがあるか
     @State private var createLeaveTo: Int?      // 作成タブから移ろうとしているタブ(下書きをどうするか聞いている間)
+    @State private var isKeyboardShown = false  // キーボードが出ているか(出ている間は下のボタンを隠す)
 
     //アプリが戻ったら読み直しして法人審査状況を反映させる
     @Environment(\.scenePhase) private var scenePhase //アプリが前面にあるか
@@ -20,6 +21,7 @@ struct MainTabView: View {
             // 下の横長のバーは隠す(代わりに、下に浮かべたボタンで切り替える)
             EventMapView()
                 .toolbar(.hidden, for: .tabBar)
+                .tabButtonsSpace()
                 .tag(0)
 
             if authManager.isCorporate {
@@ -29,17 +31,31 @@ struct MainTabView: View {
                                 leaveTo: $createLeaveTo,
                                 onLeave: { tab in selectedTab = tab })
                     .toolbar(.hidden, for: .tabBar)
+                    .tabButtonsSpace()
                     .tag(1)
             }
 
             ProfileView()
                 .toolbar(.hidden, for: .tabBar)
+                .tabButtonsSpace()
                 .tag(2)
         }
         // 画面の下に、独立したタブのボタンを浮かべる
-        // (safeAreaInset なので、地図のボタンなどはこの上に来る)
-        .safeAreaInset(edge: .bottom) {
-            tabButtons
+        // (各画面は tabButtonsSpace() でこの分の下をあけてあるので、重ならない)
+        .overlay(alignment: .bottom) {
+            // キーボードが出ている間は隠す(キーボードの「閉じる」や入力欄と重ならないように)
+            if isKeyboardShown {
+                keyboardCloseBar
+            } else {
+                tabButtons
+            }
+        }
+        // キーボードが出た・閉じたを知る
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardShown = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardShown = false
         }
         .sensoryFeedback(.selection, trigger: selectedTab)
         // 通知の許可をリクエスト
@@ -97,7 +113,25 @@ struct MainTabView: View {
             tabButton(tab: 2, icon: "person", selectedIcon: "person.fill", label: "マイページ")
         }
         .padding(.bottom, 4)
-    }    // ボタン1つ分(選んでいるタブは、塗りつぶしのアイコン・濃い色)
+    } 
+    // キーボードが出ている間、下のボタンの代わりに出す「閉じる」
+    private var keyboardCloseBar: some View {
+        HStack {
+            Spacer()
+            Button("閉じる") {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                to: nil, from: nil, for: nil)
+            }
+            .font(.subheadline.bold())
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(radius: 3)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+     // ボタン1つ分(選んでいるタブは、塗りつぶしのアイコン・濃い色)
     private func tabButton(tab: Int, icon: String, selectedIcon: String, label: String) -> some View {
         let isSelected = selectedTab == tab
         return Button {
@@ -112,6 +146,16 @@ struct MainTabView: View {
         }
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// 下に浮かべたタブのボタンの分だけ、画面の下をあける
+// (地図の右下のボタンや「到着しました」、作成画面の一番下などが、タブのボタンに隠れないように)
+private extension View {
+    func tabButtonsSpace() -> some View {
+        safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 64)   // ボタンの高さ 56 ＋ すき間
+        }
     }
 }
 
