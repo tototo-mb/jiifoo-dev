@@ -17,7 +17,7 @@ struct MainTabView: View {
         TabView(selection: Binding(
             get: { selectedTab },
             set: { selectTab($0) })) {
-            // 下の横長のバーは隠す(法人だけ、下に浮かべたボタンで切り替える)
+            // 下の横長のバーは隠す(代わりに、下に浮かべたボタンで切り替える)
             EventMapView()
                 .toolbar(.hidden, for: .tabBar)
                 .tag(0)
@@ -31,13 +31,15 @@ struct MainTabView: View {
                     .toolbar(.hidden, for: .tabBar)
                     .tag(1)
             }
+
+            ProfileView()
+                .toolbar(.hidden, for: .tabBar)
+                .tag(2)
         }
-        // 法人だけ、画面の下に「マップ」「作成」のボタンを浮かべる
+        // 画面の下に、独立したタブのボタンを浮かべる
         // (safeAreaInset なので、地図のボタンなどはこの上に来る)
         .safeAreaInset(edge: .bottom) {
-            if authManager.isCorporate {
-                tabButtons
-            }
+            tabButtons
         }
         .sensoryFeedback(.selection, trigger: selectedTab)
         // 通知の許可をリクエスト
@@ -74,7 +76,7 @@ struct MainTabView: View {
             Text(eventStore.noticeMessage)
         }
     }
-    // MARK: - タブのボタン(法人だけ)
+
 
     // タブを切り替える(入力途中で作成タブから離れるときは、先に下書きをどうするか聞く)
     private func selectTab(_ newTab: Int) {
@@ -85,16 +87,17 @@ struct MainTabView: View {
         }
     }
 
-    // 下に並べるボタン
+    // 下に並べるボタン(法人は「イベント作成」も出す)
     private var tabButtons: some View {
         HStack(spacing: 12) {
             tabButton(tab: 0, icon: "map", selectedIcon: "map.fill", label: "イベントマップ")
-            tabButton(tab: 1, icon: "plus", selectedIcon: "plus", label: "イベント作成")
+            if authManager.isCorporate {
+                tabButton(tab: 1, icon: "plus", selectedIcon: "plus", label: "イベント作成")
+            }
+            tabButton(tab: 2, icon: "person", selectedIcon: "person.fill", label: "マイページ")
         }
         .padding(.bottom, 4)
-    }
-
-    // ボタン1つ分(選んでいるタブは、塗りつぶしのアイコン・濃い色)
+    }    // ボタン1つ分(選んでいるタブは、塗りつぶしのアイコン・濃い色)
     private func tabButton(tab: Int, icon: String, selectedIcon: String, label: String) -> some View {
         let isSelected = selectedTab == tab
         return Button {

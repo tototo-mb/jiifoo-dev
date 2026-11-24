@@ -36,8 +36,7 @@ struct EventMapView: View {
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
     @State private var openedPhotoEvent: PhotoEvent?     // 開いている撮影画面
     @State private var showFilter = false               // フィルター画面を表示中か
-    @State private var showProfile = false              // マイページを表示中か
-    @State private var showSettings = false             // 設定を表示中か
+    @State private var showNearbyList = false           // 近くのイベント一覧を表示中か    
     @State private var openedCluster: EventCluster?     // 一覧を開いている、まとめたピン
     @State private var clusterPickedEvent: Event?       // 一覧で選んだイベント(一覧を閉じたら詳細を開く)
 
@@ -135,7 +134,7 @@ struct EventMapView: View {
         }
         // 予約結果やエラーのお知らせ
         .alert(eventStore.message ?? "", isPresented: Binding(
-            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter && !showProfile && !showSettings},
+            get: { eventStore.message != nil && selectedEventID == nil && !showCreateEvent && !showFarEvents && !showFilter && !showNearbyList},
             set: { if !$0 { eventStore.message = nil } }
         )) {
             Button("OK", role: .cancel) { }
@@ -182,16 +181,11 @@ struct EventMapView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        // マイページ
-        .sheet(isPresented: $showProfile) {
-            ProfileView()
+        // 近くのイベント一覧(800m圏内)
+        .sheet(isPresented: $showNearbyList) {
+            NearbyEventListView()
                 .environment(eventStore)
                 .environment(locationManager)
-        }
-        // 設定
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(authManager)
         }
         // フィルター画面
         .sheet(isPresented: $showFilter) {
@@ -221,7 +215,6 @@ struct EventMapView: View {
         .onChange(of: eventStore.focusedEvent?.id) {
             if let event = eventStore.focusedEvent {
                 showFarEvents = false 
-                showProfile = false   // マイページから「地図で見る」を押したときも閉じる
                 moveToFocusedEvent(event)
             }
         }
@@ -478,6 +471,17 @@ struct EventMapView: View {
     private var menuButton: some View {
         Menu {
             Button {
+                showNearbyList = true
+            } label: {
+                Label("近くのイベント一覧", systemImage: "list.bullet")
+            }
+            Button {
+                showFarEvents = true
+            } label: {
+                Label("全国のイベント", systemImage: "globe.asia.australia")
+            }
+            Divider()
+            Button {
                 showFilter = true
             } label: {
                 Label(eventStore.filter.isActive ? "絞り込み(使用中)" : "絞り込み",
@@ -489,22 +493,6 @@ struct EventMapView: View {
                 }
             } label: {
                 Label("再読み込み", systemImage: "arrow.clockwise")
-            }
-            Button {
-                showFarEvents = true
-            } label: {
-                Label("全国のイベント", systemImage: "globe.asia.australia")
-            }
-            Divider()
-            Button {
-                showProfile = true
-            } label: {
-                Label("マイページ", systemImage: "person.circle")
-            }
-            Button {
-                showSettings = true
-            } label: {
-                Label("設定", systemImage: "gearshape")
             }
         } label: {
             Image(systemName: "ellipsis")
