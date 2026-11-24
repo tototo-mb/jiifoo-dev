@@ -9,6 +9,7 @@ struct EventDetailView: View {
     private var canCancelEvent: Bool {isMine && event.startsAt > .now} // 自分が主催していて、まだ始まっていないときだけ中止できる
     @State private var showCancelDialog = false 
     var showMapButton = false //イベント一覧ページからイベント詳細を開いたときに地図で見るボタンを出す用
+    var onShowMap: (() -> Void)? = nil //「マップ上で見る」ボタンを押して確認したい時
     @Environment(\.dismiss) private var dismiss
     @State private var viewingPublicPhoto: PublicPhoto?   //「イベントの様子」で大きく表示している写真
     @State private var publicPhotosReloadID = UUID()      //「イベントの様子」を読み直すための目印
@@ -62,7 +63,11 @@ struct EventDetailView: View {
 
                     if showMapButton {
                         Button {
-                            eventStore.focusedEvent = event
+                            if let onShowMap {
+                                onShowMap()
+                            } else {
+                                eventStore.focusedEvent = event
+                            }
                             dismiss()
                         } label: {
                             Label("マップで場所を見る",systemImage: "map")

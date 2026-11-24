@@ -30,11 +30,14 @@ struct EventMapView: View {
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var groundScale: Double?             // 真上から見たとき「画面1ポイント÷カメラの高さ」が地面の何mか
+    @State private var gatheringStamp: ParticipationStamp? // マップの到着ボタンで到着したときのスタンプ
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
     @State private var openedPhotoEvent: PhotoEvent?     // 開いている撮影画面
     @State private var showFilter = false               // フィルター画面を表示中か
+    @State private var openedCluster: EventCluster?     // 一覧を開いている、まとめたピン
+    @State private var clusterPickedEvent: Event?       // 一覧で選んだイベント(一覧を閉じたら詳細を開く)
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -66,11 +69,36 @@ struct EventMapView: View {
             .overlay(alignment: .top) {
                 arrivalBadge
             }
+            // 集合場所の100m以内に入ったら「到着しました」ボタン(まだ到着していないときだけ)
+            .overlay(alignment: .bottom) {
+                if let event = arrivalTarget {
+                    MapArrivalButton(event: event) { isFirst in
+                        // 初めて到着したときだけ、スタンプを押す(主催者の名前はメンバー一覧から)
+                        if isFirst {
+                            let members = (try? await JiifooAPI.eventMembers(eventId: event.id)) ?? []
+                            let organizer = members.first(where: \.isCreator)?.displayName
+                            gatheringStamp = ParticipationStamp(event: event, organizerName: organizer)
+                        }
+                        // 到着できたら読み直す(到着済みになるので、ボタンが消える)
+                        gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+                    }                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring, value: arrivalTarget?.id)
             // 到着スタンプを押す演出(設定に関係なく出す)
             .overlay {
                 if let event = eventStore.arrivalStampEvent {
                     ArrivalStampOverlay(stamp: ParticipationStamp(event: event)) {
                         eventStore.arrivalStampEvent = nil
+                    }
+                }
+            }
+            // マップの到着ボタンで到着したときのスタンプ
+            .overlay {
+                if let gatheringStamp {
+                    ArrivalStampOverlay(stamp: gatheringStamp) {
+                        self.gatheringStamp = nil
                     }
                 }
             }
@@ -137,6 +165,21 @@ struct EventMapView: View {
                 .presentationDetents([.medium, .large])
         }
         
+        
+
+        // まとめたピンの一覧(選んだら、一覧を閉じてからそのピンへ)
+        .sheet(item: $openedCluster, onDismiss: {
+            if let event = clusterPickedEvent {
+                clusterPickedEvent = nil
+                selectPin(event)
+            }
+        }) { cluster in
+            ClusterListView(events: cluster.events) { event in
+                clusterPickedEvent = event
+                openedCluster = nil
+            }
+            .presentationDetents([.medium, .large])
+        }
         // フィルター画面
         .sheet(isPresented: $showFilter) {
             EventFilterView()
@@ -330,6 +373,8 @@ struct EventMapView: View {
     //地図のボタン
     private var mapLayer: some View {
         MapReader { proxy in
+            // 近くのピンをまとめる(ピンが大きいほど、まとめる距離も広く)
+            let clusters = EventCluster.make(mapEvents, camera: lastCamera, proxy: proxy, radius: 40 * pinScale)
             Map(position: $cameraPosition, bounds: cameraBounds, selection: $selectedEventID) { 
                 UserAnnotation()
                 if showJoinableRange, let userLocation = locationManager.userLocation {
@@ -338,9 +383,18 @@ struct EventMapView: View {
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
 
-                ForEach(mapEvents) { event in
-                    Annotation(event.title, coordinate: event.coordinate, anchor: .bottom) {
-                        eventPin(for: event)
+                ForEach(clusters) { cluster in
+                    if cluster.count == 1 {
+                        // 1つだけなら、今までのピン
+                        Annotation(cluster.events[0].title, coordinate: cluster.coordinate, anchor: .bottom) {
+                            eventPin(for: cluster.events[0])
+                        }
+                    } else {
+                        // 2つ以上なら、件数の丸(タップで一覧)
+                        Annotation("\(cluster.count)件", coordinate: cluster.coordinate) {
+                            ClusterBubble(cluster: cluster)
+                                .onTapGesture { openedCluster = cluster }
+                        }
                     }
                 }
             }
@@ -469,6 +523,15 @@ struct EventMapView: View {
         }
     }
 
+    // 「到着しました」ボタンを出す、集合中のイベント
+    // (集合場所の100m以内にいて、まだ到着していないときだけ。それ以外は nil)
+    private var arrivalTarget: GatheringEvent? {
+        guard let event = gatheringEvent,
+              event.myStatus != "checked_in",
+              let distance = locationManager.distance(to: event.coordinate),
+              distance <= GatheringView.checkInRadius else { return nil }
+        return event
+    }
 
     // 集合モードのバナー(body が長くなりすぎないよう分けている)
     private func gatheringBanner(for event: GatheringEvent) -> some View {

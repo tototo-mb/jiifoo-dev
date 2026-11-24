@@ -33,6 +33,7 @@ struct GatheringView: View {
     @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
     @State private var photoEvent: PhotoEvent? //終了後に開く撮影画面
+    @State private var arrivalStamp: ParticipationStamp? //到着スタンプの演出(出している間だけ入る)
 
 
     // サーバーの check_in と同じ値にする
@@ -132,6 +133,14 @@ struct GatheringView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.4), value: gathering.isActive)
+            // 到着スタンプを押す演出
+            .overlay {
+                if let arrivalStamp {
+                    ArrivalStampOverlay(stamp: arrivalStamp) {
+                        self.arrivalStamp = nil
+                    }
+                }
+            }
 
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -371,6 +380,11 @@ struct GatheringView: View {
             case "ok", "already_checked_in":
                 myStatus = "checked_in"
                 await loadMembers()
+                // 初めて到着したときだけ、スタンプを押す
+                if result == "ok" {
+                    let organizer = members.first(where: \.isCreator)?.displayName
+                    arrivalStamp = ParticipationStamp(event: event, organizerName: organizer)
+                }
             case "too_far":
                 message = "集合場所から\(Int(Self.checkInRadius))m以内で押してください"
             case "not_gathering":
