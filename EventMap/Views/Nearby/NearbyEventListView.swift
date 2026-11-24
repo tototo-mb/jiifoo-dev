@@ -98,7 +98,7 @@ struct NearbyEventListView: View {
                 print("イベント検索に失敗しました：",error)
             }
         }
-}
+}   
 
 #Preview {
     NearbyEventListView()

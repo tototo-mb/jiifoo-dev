@@ -215,6 +215,7 @@ struct EventMapView: View {
         .onChange(of: eventStore.focusedEvent?.id) {
             if let event = eventStore.focusedEvent {
                 showFarEvents = false 
+                showNearbyList = false //一覧から「マップで場所を見る」を押した時も閉じる
                 moveToFocusedEvent(event)
             }
         }
