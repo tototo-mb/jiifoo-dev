@@ -66,6 +66,14 @@ struct EventMapView: View {
             .overlay(alignment: .top) {
                 arrivalBadge
             }
+            // 到着スタンプを押す演出(設定に関係なく出す)
+            .overlay {
+                if let event = eventStore.arrivalStampEvent {
+                    ArrivalStampOverlay(stamp: ParticipationStamp(event: event)) {
+                        eventStore.arrivalStampEvent = nil
+                    }
+                }
+            }
             .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
             .task(id: eventStore.arrivalEffectEvent?.id) {
                 guard eventStore.arrivalEffectEvent != nil else { return }
@@ -267,6 +275,7 @@ struct EventMapView: View {
                         .lineLimit(1)
                 }
                 Button {
+                    eventStore.arrivalStampEvent = event   // 集合モードを終えたらスタンプを押す
                     eventStore.arrivalEffectEvent = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")

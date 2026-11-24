@@ -14,6 +14,7 @@ final class EventStore {
 
     @ObservationIgnored private var isInVenue: [Event.ID: Bool] = [:] //途中参加OK型の会場の中にいるか(出入りの通知用)
     var arrivalEffectEvent: Event? //会場に初めて着いたときの演出を出しているイベント
+    var arrivalStampEvent: Event?  //到着スタンプを押す演出を出すイベント
 
     @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
@@ -454,6 +455,7 @@ final class EventStore {
         myUserID = nil
         message = nil
         arrivalEffectEvent = nil
+        arrivalStampEvent = nil
         isInVenue = [:]
         cancelledNotices = []
         placeChangedNotices = []
