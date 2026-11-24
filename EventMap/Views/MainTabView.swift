@@ -16,47 +16,28 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: Binding(
             get: { selectedTab },
-            set: { newTab in
-                // 入力途中で作成タブから離れるときは、先に下書きをどうするか聞く
-                if authManager.isCorporate && selectedTab == 1 && newTab != 1 && createHasInput {
-                    createLeaveTo = newTab
-                } else {
-                    selectedTab = newTab
-                }
-            })) {
+            set: { selectTab($0) })) {
+            // 下の横長のバーは隠す(法人だけ、下に浮かべたボタンで切り替える)
             EventMapView()
-                .tabItem {
-                    Image(systemName: "map")
-                    Text("イベントマップ")
-                }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(0)
-            
-            if authManager.isCorporate{
-                //
+
+            if authManager.isCorporate {
                 // 作成に成功したらマップのタブへ切り替える
                 CreateEventView(onCreated: { selectedTab = 0 },
                                 hasInput: $createHasInput,
                                 leaveTo: $createLeaveTo,
-                                onLeave: { tab in selectedTab = tab })                    
-                        .tabItem{
-                        Image(systemName: "plus.circle")
-                        Text("イベント作成")
-                    }
-                    .tag(1)
-            }else{
-                NearbyEventListView()
-                    .tabItem{
-                        Image(systemName: "magnifyingglass")
-                        Text("イベント検索")
-                    }
+                                onLeave: { tab in selectedTab = tab })
+                    .toolbar(.hidden, for: .tabBar)
                     .tag(1)
             }
-            ProfileView()
-                .tabItem {
-                    Image(systemName: "person.circle")
-                    Text("マイページ")
-                }
-                .tag(2)
+        }
+        // 法人だけ、画面の下に「マップ」「作成」のボタンを浮かべる
+        // (safeAreaInset なので、地図のボタンなどはこの上に来る)
+        .safeAreaInset(edge: .bottom) {
+            if authManager.isCorporate {
+                tabButtons
+            }
         }
         .sensoryFeedback(.selection, trigger: selectedTab)
         // 通知の許可をリクエスト
@@ -93,7 +74,44 @@ struct MainTabView: View {
             Text(eventStore.noticeMessage)
         }
     }
+    // MARK: - タブのボタン(法人だけ)
+
+    // タブを切り替える(入力途中で作成タブから離れるときは、先に下書きをどうするか聞く)
+    private func selectTab(_ newTab: Int) {
+        if authManager.isCorporate && selectedTab == 1 && newTab != 1 && createHasInput {
+            createLeaveTo = newTab
+        } else {
+            selectedTab = newTab
+        }
+    }
+
+    // 下に並べるボタン
+    private var tabButtons: some View {
+        HStack(spacing: 12) {
+            tabButton(tab: 0, icon: "map", selectedIcon: "map.fill", label: "イベントマップ")
+            tabButton(tab: 1, icon: "plus", selectedIcon: "plus", label: "イベント作成")
+        }
+        .padding(.bottom, 4)
+    }
+
+    // ボタン1つ分(選んでいるタブは、塗りつぶしのアイコン・濃い色)
+    private func tabButton(tab: Int, icon: String, selectedIcon: String, label: String) -> some View {
+        let isSelected = selectedTab == tab
+        return Button {
+            selectTab(tab)
+        } label: {
+            Image(systemName: isSelected ? selectedIcon : icon)
+                .font(.title3.weight(isSelected ? .bold : .regular))
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                .frame(width: 56, height: 56)
+                .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 18))
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+        }
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
 }
+
 
 #Preview {
     MainTabView()

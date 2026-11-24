@@ -5,6 +5,7 @@ import SwiftUI
 // ③ インスタ風マイページ
 struct ProfileView: View {
     @Environment(EventStore.self) private var eventStore
+    @Environment(\.dismiss) private var dismiss //マップのメニューから開いたシートを閉じる
 
     // 仮のユーザー情報（ログイン機能ができたら差し替え）
     private let myName = "ユーザー名"
@@ -97,6 +98,9 @@ struct ProfileView: View {
             .task { await loadPastEvents() }
             .refreshable { await loadPastEvents() }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("閉じる") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button{
                         showSettings=true

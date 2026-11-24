@@ -14,22 +14,22 @@ struct EventMapApp: App {
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
     }
     
-
-
+    
+    
     var body: some Scene {
         WindowGroup {
             //SupabaseTestView()//テスト用
             Group{if authManager.isChecking == true{
                 ProgressView()
             }else if  authManager.isLoggedIn == true{
-                    MainTabView()
-                        .environment(locationManager)
-                        .environment(eventStore)
-                        .environment(authManager)
-                        .environment(gathering)
+                MainTabView()
+                    .environment(locationManager)
+                    .environment(eventStore)
+                    .environment(authManager)
+                    .environment(gathering)
             }else{
-                    LoginView()
-                }
+                LoginView()
+            }
             }
             .task {
                 await authManager.startListening()
