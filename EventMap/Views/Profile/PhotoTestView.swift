@@ -11,8 +11,47 @@ struct PhotoTestView: View {
     @State private var lastSizeText: String?
     @State private var message: String?
 
+    // 到着の記念写真のスタンプを試す
+    @State private var samplePhoto: UIImage?        // 試しに使う写真(保存はしない)
+    @State private var showSampleCamera = false
+    @State private var sampleStamped = false        // false → true で「ドン」と押す
+    private let sampleStamp = ParticipationStamp(eventID: UUID(), title: "サンプルイベント",
+                                                 organizerName: "主催者名", date: .now, isCorporate: false)
+
     var body: some View {
         Form {
+            // ---- 到着の記念写真のスタンプ ----
+            Section {
+                Button {
+                    showSampleCamera = true
+                } label: {
+                    Label("写真を撮って試す", systemImage: "camera")
+                }
+                Button {
+                    Task {
+                        // 渋谷駅のあたりの地図で試す
+                        samplePhoto = await VenueMapImage.make(
+                            center: .init(latitude: 35.6595, longitude: 139.7005))
+                        pressSampleStamp()
+                    }
+                } label: {
+                    Label("地図の画像で試す", systemImage: "map")
+                }
+                if let samplePhoto {
+                    Image(uiImage: samplePhoto)
+                        .resizable()
+                        .scaledToFit()
+                        .overlay(alignment: .bottomTrailing) {
+                            CertificateStampLayer(stamp: sampleStamp, isStamped: sampleStamped)
+                        }
+                        .listRowInsets(EdgeInsets())
+                    Button("もう一度押す") { pressSampleStamp() }
+                }
+            } header: {
+                Text("到着の記念写真のスタンプ")
+            } footer: {
+                Text("到着したときの記念写真と同じスタンプを試せます。ここで撮った写真は保存されません。")            
+            }
             Section {
                 Button {
                     showCamera = true
@@ -51,6 +90,16 @@ struct PhotoTestView: View {
         .task {
             userID = await JiifooAPI.currentUserID()
         }
+        // スタンプを押した瞬間に「ドン」と振動
+        .sensoryFeedback(.impact(weight: .heavy), trigger: sampleStamped)
+        // スタンプを試す写真を撮る
+        .fullScreenCover(isPresented: $showSampleCamera) {
+            CameraPicker { image in
+                samplePhoto = image
+                pressSampleStamp()
+            }
+            .ignoresSafeArea()
+        }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
                 upload(image)
@@ -62,6 +111,17 @@ struct PhotoTestView: View {
             set: { if !$0 { message = nil } }
         )) {
             Button("OK", role: .cancel) {}
+        }
+    }
+
+    // サンプルのスタンプを、もう一度「ドン」と押す
+    private func pressSampleStamp() {
+        sampleStamped = false
+        Task {
+            try? await Task.sleep(for: .seconds(0.3))
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+                sampleStamped = true
+            }
         }
     }
 
