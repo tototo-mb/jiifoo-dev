@@ -6,12 +6,6 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(EventStore.self) private var eventStore
 
-    // 仮のユーザー情報（ログイン機能ができたら差し替え）
-    private let myName = "ユーザー名"
-    private let bio = "自己紹介テキスト"
-    private let followerCount = 0
-    
-    
     enum ProfileTab: String, CaseIterable {
         case posted = "過去に参加したイベント"
         case joined = "参加予定"
@@ -30,12 +24,6 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    ProfileHeaderView(name: myName,
-                                      bio: bio,
-                                      postedCount: pastEvents.count,
-                                      joinedCount: eventStore.joinedEvents.count,
-                                      followerCount: followerCount)
-
                     // 掲載 / 参加予定 の切り替え
                     Picker("表示", selection: $selectedTab) {
                         ForEach(ProfileTab.allCases, id: \.self) { tab in
@@ -55,11 +43,11 @@ struct ProfileView: View {
                                 systemImage: "calendar.badge.exclamationmark")
                                 .padding(.top, 24)
                         } else {
-                            // 参加スタンプを2列で並べる（タップで大きいスタンプと写真の画面へ）
+                            // 到着の記念写真(なければ参加スタンプ)を2列で並べる（タップで大きいスタンプと写真の画面へ）                            
                             LazyVGrid(columns: stampColumns, spacing: 12) {
                                 ForEach(pastEvents) { event in
                                     NavigationLink(value: event) {
-                                        StampOnPaper(stamp: ParticipationStamp(event: event), padding: 10)
+                                        CertificateThumbnail(event: event)                                    
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -88,7 +76,7 @@ struct ProfileView: View {
                 }
                 .padding(.top)
             }
-            .navigationTitle(myName)
+            .navigationTitle("マイページ")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: PastEvent.self) { event in
                 PastEventDetailView(event: event)
