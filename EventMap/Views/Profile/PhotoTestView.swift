@@ -43,8 +43,9 @@ struct PhotoTestView: View {
                 Button {
                     Task {
                         // 渋谷駅のあたりの地図で試す
-                        samplePhoto = await VenueMapImage.make(
-                            center: .init(latitude: 35.6595, longitude: 139.7005))
+                        samplePhoto = PhotoCrop.centerCrop(
+                            await VenueMapImage.make(center: .init(latitude: 35.6595, longitude: 139.7005)),
+                            aspect: CertificateFrame.aspect)
                         pressSampleStamp()
                     }
                 } label: {
@@ -54,8 +55,8 @@ struct PhotoTestView: View {
                     Image(uiImage: samplePhoto)
                         .resizable()
                         .scaledToFit()
-                        .overlay(alignment: .bottomTrailing) {
-                            CertificateStampLayer(stamp: sampleStamp, isStamped: sampleStamped)
+                        .overlay {
+                            CertificateFrameLayer(stamp: sampleStamp, isStamped: sampleStamped)
                         }
                         .listRowInsets(EdgeInsets())
                     Button("もう一度押す") { pressSampleStamp() }
@@ -107,10 +108,11 @@ struct PhotoTestView: View {
         .sensoryFeedback(.impact(weight: .heavy), trigger: sampleStamped)
         // スタンプを試す写真を撮る
         .fullScreenCover(isPresented: $showSampleCamera) {
-            CameraPicker { image in
-                samplePhoto = image
+            // 本番の記念写真と同じく、撮影枠を出して、同じ比率に切り抜く
+            CameraPicker(onCapture: { image in
+                samplePhoto = PhotoCrop.centerCrop(image, aspect: CertificateFrame.aspect)
                 pressSampleStamp()
-            }
+            }, guideAspect: CertificateFrame.aspect)
             .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showCamera) {

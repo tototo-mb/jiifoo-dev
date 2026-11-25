@@ -80,7 +80,7 @@ enum StampInk {
 
 struct ParticipationStampView: View {
     let stamp: ParticipationStamp
-    var tilted = true      // 少し傾けて「押した」感じにするか
+    var tilted = false     // 少し傾けて「押した」感じにするか（今はまっすぐ表示。true にすると傾く）
     var showsFrame = true  // 二重の枠を描くか
     var paper: Color? = nil // スタンプの形(外側の枠の内側)だけを塗る色。nil なら塗らない(透明)
 
@@ -152,10 +152,13 @@ private struct StampFace: View {
                 .frame(width: 140, alignment: .trailing)
                 .position(x: 226, y: 52)
 
-            // ARRIVED と日付
-            Text("ARRIVED")
+            // ASSEMBLED（集合した）と日付
+            Text("ASSEMBLED")
                 .font(.system(size: 54, weight: .bold).width(.condensed))
                 .tracking(5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(width: 280)
                 .position(x: 170, y: 101)
             Text(stamp.dateText)
                 .font(.system(size: 24, weight: .medium).width(.condensed))
