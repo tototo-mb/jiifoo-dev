@@ -20,6 +20,19 @@ struct PhotoTestView: View {
 
     var body: some View {
         Form {
+            // ---- マイページのマスの形 ----
+            Section {
+                // 写真あり・なしを並べて見る(写真は下の「写真を撮って試す」などで用意する)
+                HStack(alignment: .top, spacing: 12) {
+                    CertificateTile(stamp: sampleStamp, photo: samplePhoto)
+                    CertificateTile(stamp: sampleStamp, photo: nil)
+                }
+            } header: {
+                Text("マイページのマスの形")
+            } footer: {
+                Text("左が写真あり、右が写真なしのイベントです。左の写真は、下の「写真を撮って試す」「地図の画像で試す」で用意できます。")
+            }
+
             // ---- 到着の記念写真のスタンプ ----
             Section {
                 Button {
