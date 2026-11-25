@@ -81,6 +81,8 @@ enum StampInk {
 struct ParticipationStampView: View {
     let stamp: ParticipationStamp
     var tilted = true      // 少し傾けて「押した」感じにするか
+    var showsFrame = true  // 二重の枠を描くか
+    var paper: Color? = nil // スタンプの形(外側の枠の内側)だけを塗る色。nil なら塗らない(透明)
 
     // デザインの大きさ（この大きさで描いてから縮める）
     private static let designSize = CGSize(width: 340, height: 290)
@@ -89,7 +91,7 @@ struct ParticipationStampView: View {
         GeometryReader { geo in
             let scale = min(geo.size.width / Self.designSize.width,
                             geo.size.height / Self.designSize.height)
-            StampFace(stamp: stamp)
+            StampFace(stamp: stamp, showsFrame: showsFrame, paper: paper)
                 .frame(width: Self.designSize.width, height: Self.designSize.height)
                 .scaleEffect(scale)
                 .rotationEffect(.degrees(tilted ? stamp.tilt : 0))
@@ -110,20 +112,29 @@ struct ParticipationStampView: View {
 // スタンプの絵（340×290 の中に、デザイン案Dと同じ位置で並べる）
 private struct StampFace: View {
     let stamp: ParticipationStamp
+    var showsFrame = true
+    var paper: Color? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let ink = StampInk.color(isCorporate: stamp.isCorporate, scheme: colorScheme)
 
         ZStack {
+            // スタンプの形だけを塗る(外側の枠と同じ大きさ・角丸)
+            if let paper {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(paper)
+                    .frame(width: 324, height: 274)
+            }
             // 二重の枠
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(ink, lineWidth: 6)
-                .frame(width: 324, height: 274)
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(ink, lineWidth: 2)
-                .frame(width: 298, height: 248)
-
+            if showsFrame {
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(ink, lineWidth: 6)
+                    .frame(width: 324, height: 274)
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(ink, lineWidth: 2)
+                    .frame(width: 298, height: 248)
+            }            
             // 左上：ロゴ（アイコン＋文字）
             JiifooLogoShape()
                 .fill(ink, style: FillStyle(eoFill: true))

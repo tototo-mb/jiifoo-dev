@@ -30,7 +30,7 @@ struct EventMapView: View {
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var groundScale: Double?             // 真上から見たとき「画面1ポイント÷カメラの高さ」が地面の何mか
-    @State private var gatheringStamp: ParticipationStamp? // マップの到着ボタンで到着したときのスタンプ
+    @State private var certificateEvent: CertificateEvent? //到着時の記念写真画面を開いているイベント    
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
@@ -78,8 +78,8 @@ struct EventMapView: View {
                         if isFirst {
                             let members = (try? await JiifooAPI.eventMembers(eventId: event.id)) ?? []
                             let organizer = members.first(where: \.isCreator)?.displayName
-                            gatheringStamp = ParticipationStamp(event: event, organizerName: organizer)
-                        }
+                            certificateEvent = CertificateEvent(event: event, organizerName: organizer)                        
+                            }
                         // 到着できたら読み直す(到着済みになるので、ボタンが消える)
                         gatheringEvent = try? await JiifooAPI.myGatheringEvent()
                     }                    .padding(.bottom, 24)
@@ -95,15 +95,10 @@ struct EventMapView: View {
                     }
                 }
             }
-            // マップの到着ボタンで到着したときのスタンプ
-            .overlay {
-                if let gatheringStamp {
-                    ArrivalStampOverlay(stamp: gatheringStamp) {
-                        self.gatheringStamp = nil
-                    }
-                }
-            }
-            .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
+            // マップの到着ボタンで到着したときの、到着の記念写真の画面
+            .fullScreenCover(item: $certificateEvent) { event in
+                ArrivalCertificateView(event: event)
+            }            .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
             .task(id: eventStore.arrivalEffectEvent?.id) {
                 guard eventStore.arrivalEffectEvent != nil else { return }
                 try? await Task.sleep(for: .seconds(60))

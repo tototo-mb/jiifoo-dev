@@ -26,15 +26,11 @@ struct GatheringView: View {
     @State private var isEnding = false //終了の処理中か
     @State private var showEndConfirm = false //集合モードを終了する前の確認
     @State private var myUserID: UUID?
-    @State private var showArrivalChoice = false //「写真を撮る/撮らない」の選択を出すか
-    @State private var showCamera = false
-    @State private var showCameraNotice = false   // 撮影前の注意(このイベントで初めてのとき)
     @State private var photoUserIDs: Set<UUID> = [] //到着時の写真を撮った人
     @State private var photoReloadID = UUID() //写真を撮り直したら表示を読み直す
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
     @State private var photoEvent: PhotoEvent? //終了後に開く撮影画面
-    @State private var arrivalStamp: ParticipationStamp? //到着スタンプの演出(出している間だけ入る)
-
+    @State private var certificateEvent: CertificateEvent? //到着の記念写真の画面を開いているとき
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -133,15 +129,13 @@ struct GatheringView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.4), value: gathering.isActive)
-            // 到着スタンプを押す演出
-            .overlay {
-                if let arrivalStamp {
-                    ArrivalStampOverlay(stamp: arrivalStamp) {
-                        self.arrivalStamp = nil
-                    }
+            // 到着の記念写真の画面(閉じたら、到着写真の表示を読み直す)
+            .fullScreenCover(item: $certificateEvent) { event in
+                ArrivalCertificateView(event: event) {
+                    photoReloadID = UUID()
+                    Task { await loadMembers() }
                 }
             }
-
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -199,15 +193,7 @@ struct GatheringView: View {
                 isCreator = myUserID == event.creatorId
                 if isCreator { await loadMembers() } // 主催者なら写真の一覧もすぐ読み込む
             }
-            //到着するとき、写真を撮るか選ぶ(法人イベントのみ)
-            .confirmationDialog("到着を記録します",
-                                isPresented: $showArrivalChoice,
-                                titleVisibility: .visible) {
-            Button("写真を撮って到着する") { openCamera() }                
-            Button("写真なしで到着する") { checkIn() }
-            } message: {
-                Text("写真は主催者と参加者だけが見られます")
-            }
+
             // 集合モードを終了する前の確認
             .alert("集合モードを終了しますか？", isPresented: $showEndConfirm) {
                 Button("終了する", role: .destructive) { endGathering() }
@@ -215,21 +201,8 @@ struct GatheringView: View {
             } message: {
                 Text("参加者全員の集合モードも終わります。終了すると元に戻せません。")
             }
-            // 撮影前の注意(このイベントで初めてカメラを開くときだけ)
-            .alert(PhotoNotice.cameraTitle, isPresented: $showCameraNotice) {
-                Button("OK") {
-                    PhotoNotice.markCameraNoticeSeen(eventID: event.id)
-                    showCamera = true
-                }
-            } message: {
-                Text(PhotoNotice.cameraMessage)
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image in
-                    arriveWithPhoto(image)
-                }
-                .ignoresSafeArea()
-            }
+           
+
             //メンバーの到着写真を大きく表示
             .sheet(item: $viewingPhotoMember) { member in
                 NavigationStack {
@@ -286,15 +259,6 @@ struct GatheringView: View {
         }
     }
 
-    // カメラを開く(このイベントで初めてなら、先に注意を出す)
-    private func openCamera() {
-        if PhotoNotice.hasSeenCameraNotice(eventID: event.id) {
-            showCamera = true
-        } else {
-            showCameraNotice = true
-        }
-    }
-
 
     // MARK: - 到着ボタン
 
@@ -307,12 +271,7 @@ struct GatheringView: View {
                     .foregroundStyle(.secondary)
             }
             Button {
-                // 法人イベントは「写真を撮る/撮らない」を選んでから到着する
-                if canArriveWithPhoto {
-                    showArrivalChoice = true
-                } else {
-                    checkIn()
-                }
+                checkIn()
             } label: {
                 Label(isCheckedIn ? "到着済み" : "到着しました",
                       systemImage: isCheckedIn ? "checkmark.circle.fill" : "mappin.and.ellipse")
@@ -349,24 +308,6 @@ struct GatheringView: View {
         }
     }
 
-    // 写真を保存してから到着を記録する
-    private func arriveWithPhoto(_ image: UIImage) {
-        guard let myUserID else { return }
-        isCheckingIn = true
-        Task {
-            do {
-                try await PhotoStorage.upload(
-                    image, to: PhotoStorage.arrivalPath(eventID: event.id, userID: myUserID))
-                photoReloadID = UUID()
-                isCheckingIn = false
-                checkIn()   // 写真の保存に成功したら到着を記録
-            } catch {
-                isCheckingIn = false
-                message = "写真を保存できませんでした。もう一度試すか、写真なしで到着してください"
-                print("到着写真の保存に失敗:", error)
-            }
-        }
-    }
 
     private func checkIn() {
         guard let here = locationManager.userLocation else { return }
@@ -380,10 +321,10 @@ struct GatheringView: View {
             case "ok", "already_checked_in":
                 myStatus = "checked_in"
                 await loadMembers()
-                // 初めて到着したときだけ、スタンプを押す
+                // 初めて到着したときだけ、到着の記念写真の画面を開く
                 if result == "ok" {
                     let organizer = members.first(where: \.isCreator)?.displayName
-                    arrivalStamp = ParticipationStamp(event: event, organizerName: organizer)
+                    certificateEvent = CertificateEvent(event: event, organizerName: organizer)
                 }
             case "too_far":
                 message = "集合場所から\(Int(Self.checkInRadius))m以内で押してください"

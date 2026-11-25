@@ -7,6 +7,7 @@ import UIKit
 struct CameraPicker: UIViewControllerRepresentable {
     // 撮れたときに呼ばれる(キャンセルしたときは呼ばれない)
     var onCapture: (UIImage) -> Void
+    var onCancel: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -41,6 +42,7 @@ struct CameraPicker: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.onCancel()
             parent.dismiss()
         }
     }
