@@ -1,10 +1,10 @@
 import SwiftUI
 
 // マップの下に出す「到着しました」ボタン
-// (集合モード中で、集合場所の100m以内にいて、まだ到着していないときだけ地図に出す)
+// (集合場所・会場の100m以内にいて、まだ到着していないときだけ地図に出す。時間厳守型・途中参加型の両方)
 // 押すと到着を記録する。初めての到着なら、地図の側で「到着の記念写真」の画面を開く
 struct MapArrivalButton: View {
-    let event: GatheringEvent
+    let eventID: UUID
     var onArrived: (_ isFirst: Bool) async -> Void   // 到着できたら呼ぶ(isFirst: 初めての到着か)
 
     @Environment(LocationManager.self) private var locationManager
@@ -49,8 +49,7 @@ struct MapArrivalButton: View {
         isCheckingIn = true
         Task {
             let result = (try? await JiifooAPI.checkIn(
-                eventId: event.id, latitude: here.latitude, longitude: here.longitude)) ?? "error"
-
+                eventId: eventID, latitude: here.latitude, longitude: here.longitude)) ?? "error"
             switch result {
             case "ok", "already_checked_in":
                 arrived = true

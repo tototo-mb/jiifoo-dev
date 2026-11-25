@@ -30,7 +30,8 @@ struct EventMapView: View {
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
     @State private var wasFollowing = false             // ピンを押す前に追従中だったか
     @State private var groundScale: Double?             // 真上から見たとき「画面1ポイント÷カメラの高さ」が地面の何mか
-    @State private var certificateEvent: CertificateEvent? //到着時の記念写真画面を開いているイベント    
+    @State private var certificateEvent: CertificateEvent? //到着時の記念写真画面を開いているイベント   
+    @State private var dropInGlowEvent: Event?  // 記念写真の画面を開いている間も光らせる途中参加型のイベント 
     @State private var gatheringEvent:GatheringEvent?   //今「集合中」のイベント
     @State private var openedGathering:GatheringEvent?   //開いている集合画面
     @State private var photoEvents: [PhotoEvent] = []    // 今、思い出の写真を撮れるイベント
@@ -59,10 +60,9 @@ struct EventMapView: View {
         }
         // 集合モードの光とカウントダウン（GroupModeUI.swift）
         .gatheringModeOverlay()
-        //途中参加型イベントに参加し、初めてイベント開催地に到着した場合
+        //途中参加型:会場(100m以内)に入ってから、記念写真の画面を閉じるまで光らせる
         .overlay {
-        if eventStore.arrivalEffectEvent != nil && showGatheringEffect { 
-                    ScreenEdgeGlowView()
+        if isDropInGlowing && showGatheringEffect {                    ScreenEdgeGlowView()
                     .transition(.opacity)
             }
         }
@@ -70,36 +70,19 @@ struct EventMapView: View {
             .overlay(alignment: .top) {
                 arrivalBadge
             }
-            // 集合場所の100m以内に入ったら「到着しました」ボタン(まだ到着していないときだけ)
+            // 集合場所・会場の100m以内に入ったら「到着しました」ボタン(まだ到着していないときだけ)
             .overlay(alignment: .bottom) {
-                if let event = arrivalTarget {
-                    MapArrivalButton(event: event) { isFirst in
-                        // 初めて到着したときだけ、スタンプを押す(主催者の名前はメンバー一覧から)
-                        if isFirst {
-                            let members = (try? await JiifooAPI.eventMembers(eventId: event.id)) ?? []
-                            let organizer = members.first(where: \.isCreator)?.displayName
-                            certificateEvent = CertificateEvent(event: event, organizerName: organizer)                        
-                            }
-                        // 到着できたら読み直す(到着済みになるので、ボタンが消える)
-                        gatheringEvent = try? await JiifooAPI.myGatheringEvent()
-                    }                    .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                arrivalButton
             }
-            .animation(.spring, value: arrivalTarget?.id)
-            // 到着スタンプを押す演出(設定に関係なく出す)
-            .overlay {
-                if let event = eventStore.arrivalStampEvent {
-                    ArrivalStampOverlay(stamp: ParticipationStamp(event: event)) {
-                        eventStore.arrivalStampEvent = nil
-                    }
-                }
-            }
-            // マップの到着ボタンで到着したときの、到着の記念写真の画面
-            .fullScreenCover(item: $certificateEvent) { event in
+            .animation(.spring, value: arrivalButtonEventID)
+
+            // 到着の記念写真の画面(閉じたら、途中参加型の光を終える)
+            .fullScreenCover(item: $certificateEvent, onDismiss: {
+                dropInGlowEvent = nil
+            }) { event in
                 ArrivalCertificateView(event: event)
-            }            .animation(.easeInOut(duration: 0.4), value: eventStore.arrivalEffectEvent?.id)
-            .task(id: eventStore.arrivalEffectEvent?.id) {
+            }
+            .animation(.easeInOut(duration: 0.4), value: isDropInGlowing)            .task(id: eventStore.arrivalEffectEvent?.id) {
                 guard eventStore.arrivalEffectEvent != nil else { return }
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
@@ -334,7 +317,6 @@ struct EventMapView: View {
                         .lineLimit(1)
                 }
                 Button {
-                    eventStore.arrivalStampEvent = event   // 集合モードを終えたらスタンプを押す
                     eventStore.arrivalEffectEvent = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -603,6 +585,59 @@ struct EventMapView: View {
               let distance = locationManager.distance(to: event.coordinate),
               distance <= GatheringView.checkInRadius else { return nil }
         return event
+    }
+
+
+    // 地図の下に出す「到着しました」ボタン(時間厳守型・途中参加型)
+    @ViewBuilder
+    private var arrivalButton: some View {
+        if let event = arrivalTarget {
+            // 時間厳守型
+            MapArrivalButton(eventID: event.id) { isFirst in
+                // 初めて到着したときだけ、到着の記念写真の画面を開く
+                if isFirst {
+                    certificateEvent = CertificateEvent(event: event, organizerName: await organizerName(of: event.id))
+                }
+                // 到着できたら読み直す(到着済みになるので、ボタンが消える)
+                gatheringEvent = try? await JiifooAPI.myGatheringEvent()
+            }
+            .padding(.bottom, 24)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if let event = dropInArrivalTarget {
+            // 途中参加型
+            MapArrivalButton(eventID: event.id) { isFirst in
+                // 到着済みにする(ボタンが消える)
+                eventStore.didArriveDropIn(event)
+                // 初めて到着したときだけ、到着の記念写真の画面を開く(閉じるまで光らせ続ける)
+                if isFirst {
+                    dropInGlowEvent = event
+                    certificateEvent = CertificateEvent(event: event, organizerName: await organizerName(of: event.id))
+                }
+            }
+            .padding(.bottom, 24)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    // 「到着しました」ボタンを出しているイベントのID(出る・消えるの動きに使う)
+    private var arrivalButtonEventID: UUID? {
+        arrivalTarget?.id ?? dropInArrivalTarget?.id
+    }
+
+    // 途中参加型の光を出すか(会場に入って「到着しました」が出ている間と、記念写真の画面を開いている間)
+    private var isDropInGlowing: Bool {
+        dropInArrivalTarget != nil || dropInGlowEvent != nil
+    }
+
+    // 途中参加型で「到着しました」ボタンを出すイベント(会場の100m以内で、まだ到着していないとき)
+    private var dropInArrivalTarget: Event? {
+        eventStore.dropInArrivalTarget(near: locationManager.userLocation)
+    }
+
+    // イベントの主催者の名前(スタンプに載せる。メンバー一覧から探す)
+    private func organizerName(of eventID: UUID) async -> String? {
+        let members = (try? await JiifooAPI.eventMembers(eventId: eventID)) ?? []
+        return members.first(where: \.isCreator)?.displayName
     }
 
     // 集合モードのバナー(body が長くなりすぎないよう分けている)

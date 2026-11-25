@@ -241,6 +241,13 @@ extension CertificateEvent {
                   isCorporate: event.kind == "corporate", coordinate: event.coordinate,
                   organizerName: organizerName)
     }
+
+    // 途中参加型(地図の「到着しました」で到着したとき)
+    init(event: Event, organizerName: String?) {
+        self.init(id: event.id, title: event.title, startsAt: event.startsAt,
+                  isCorporate: event.kind == "corporate", coordinate: event.coordinate,
+                  organizerName: organizerName)
+    }
 }
 
 struct CertificateStampBadge: View {

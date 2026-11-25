@@ -14,9 +14,7 @@ final class EventStore {
 
     @ObservationIgnored private var isInVenue: [Event.ID: Bool] = [:] //途中参加OK型の会場の中にいるか(出入りの通知用)
     var arrivalEffectEvent: Event? //会場に初めて着いたときの演出を出しているイベント
-    var arrivalStampEvent: Event?  //到着スタンプを押す演出を出すイベント
 
-    @ObservationIgnored private var arrivingIDs: Set<Event.ID> = [] //一度だけ、現在"check_in"を送っている途中のイベント取り出す
     var isLoading = false
     var message: String?                      // 画面に出すお知らせ・エラー
     var focusedEvent: Event?
@@ -91,48 +89,44 @@ final class EventStore {
     static let venueRadius: Double = 100
     static let venueLeaveRadius: Double = 150
 
-    //途中参加可能型：参加予定のイベントの会場(100m以内)に着いたら、自動的に参加済みにする
-    // 1回目(参加済になったとき):通知 + 光・振動
-    // 2回目以降(一度出て、また入ったとき):通知だけ
+    //途中参加可能型:到着済みのイベントの会場を出入りしたか調べる(入り直したら通知)
+    // ※初めての到着は、地図の「到着しました」ボタンで行う(時間厳守型と同じ)
     func arriveIfNear(_ here: CLLocationCoordinate2D) {
         let now = Date()
         let hereLocation = CLLocation(latitude: here.latitude, longitude: here.longitude)
         for event in events {
-            //途中参加可能型で、イベント開催中で、参加予定のイベントだけ
+            //途中参加可能型で、イベント開催中で、到着済みのイベントだけ
             guard event.joinType == .dropIn,
-                  isJoined(event),
+                  isCheckedIn(event),
                   event.startsAt <= now, now < event.endsAt else { continue }
             let venue = CLLocation(latitude: event.latitude, longitude: event.longitude)
-            let distance = hereLocation.distance(from: venue)
-
-            // 2回目以降:会場を出入りしたか調べる
-            if isCheckedIn(event) {
-                updateVenueState(event, distance: distance)
-                continue
-            }
-
-            // 1回目:イベント開催地から100m以内に入ったら参加済にする
-            guard !arrivingIDs.contains(event.id),
-                  distance <= Self.venueRadius else { continue }
-
-            arrivingIDs.insert(event.id)
-            Task{
-                let result = ( try? await JiifooAPI.checkIn(
-                    eventId: event.id, latitude: here.latitude, longitude: here.longitude)) ?? "error"
-                if result == "ok" || result == "already_checked_in" {
-                    checkedInEventIDs.insert(event.id)
-                }
-                // 初めて参加済になったときだけ、通知と演出
-                if result == "ok" {
-                    isInVenue[event.id] = true
-                    arrivalEffectEvent = event
-                    await NotificationManager.notifyArrival(title: event.title, isFirst: true)
-                }
-                arrivingIDs.remove(event.id)
-            }
+            updateVenueState(event, distance: hereLocation.distance(from: venue))
         }
     }
 
+    //途中参加可能型:「到着しました」ボタンを出すイベント
+    // (開催中・参加予定・まだ到着していない・会場の100m以内。なければ nil)
+    func dropInArrivalTarget(near here: CLLocationCoordinate2D?) -> Event? {
+        guard let here else { return nil }
+        let now = Date()
+        let hereLocation = CLLocation(latitude: here.latitude, longitude: here.longitude)
+        return events.first { event in
+            let venue = CLLocation(latitude: event.latitude, longitude: event.longitude)
+            return event.joinType == .dropIn
+                && isJoined(event)
+                && !isCheckedIn(event)
+                && event.startsAt <= now && now < event.endsAt
+                && hereLocation.distance(from: venue) <= Self.venueRadius
+        }
+    }
+
+    //途中参加可能型:「到着しました」ボタンで到着できたとき
+    // (光は地図の側で、会場に入ってから記念写真の画面を閉じるまで出す)
+    func didArriveDropIn(_ event: Event) {
+        checkedInEventIDs.insert(event.id)
+        isInVenue[event.id] = true
+    }
+        
     // 会場を出入りしたか調べて、入ったときは通知する(参加済のイベント用)
     // ・100m 以内 → 「中」。前が「外」なら通知
     // ・150m より遠い → 「外」
@@ -469,7 +463,6 @@ final class EventStore {
         myUserID = nil
         message = nil
         arrivalEffectEvent = nil
-        arrivalStampEvent = nil
         isInVenue = [:]
         cancelledNotices = []
         placeChangedNotices = []
