@@ -197,6 +197,8 @@ struct EventMapView: View {
                 moveToFocusedEvent(event)
             }
         }
+
+
         
         .sheet(isPresented: $showFarEvents) {
             FarEventsView(startCamera: farEventsStartCamera)
@@ -270,6 +272,8 @@ struct EventMapView: View {
 }
 
     // MARK: - 集合モード
+
+
 
     // 自分が集合中のイベントがあるか確認する
     // 始まったら光・振動・カウントダウンを出し、終わったら消す
@@ -358,7 +362,7 @@ struct EventMapView: View {
     private var cameraBounds: MapCameraBounds? {
         // 「地図で場所を見る」で遠くのイベントを見ているときは制限しない
         guard eventStore.focusedEvent == nil,
-              let here = locationManager.userLocation else { return nil }
+            let here = locationManager.userLocation else { return nil }
         let region = MKCoordinateRegion(center: here,
                                         latitudinalMeters: Self.limitRadius * 2,
                                         longitudinalMeters: Self.limitRadius * 2)
@@ -380,6 +384,7 @@ struct EventMapView: View {
                         .foregroundStyle(.blue.opacity(0.08))
                         .stroke(.blue.opacity(0.5), lineWidth: 1.5)
                 }
+
 
                 ForEach(clusters) { cluster in
                     if cluster.count == 1 {
@@ -430,12 +435,13 @@ struct EventMapView: View {
         VStack(spacing: 12) {
             // 集合モード中だけ:集合モード画面を開く
             if let gatheringEvent {
+                // 集合モード画面を開く
                 colorCircleButton(systemName: "flame.fill", color: .orange) {
                     openedGathering = gatheringEvent
                 }
                 .accessibilityLabel("集合モード")
-            }
 
+            }
             // 思い出の写真を撮れる時間だけ:撮影画面を開く(会場の外では灰色)
             if let photoEvent = photoEvents.first {
                 colorCircleButton(systemName: "camera.fill",

@@ -31,6 +31,7 @@ struct GatheringView: View {
     @State private var viewingPhotoMember: GatheringMember? //大きく表示している写真のメンバー
     @State private var photoEvent: PhotoEvent? //終了後に開く撮影画面
     @State private var certificateEvent: CertificateEvent? //到着の記念写真の画面を開いているとき
+    @State private var route: MKRoute? //集合場所までのルート
 
     // サーバーの check_in と同じ値にする
     static let checkInRadius: Double = 100
@@ -62,13 +63,37 @@ struct GatheringView: View {
                     MapCircle(center: event.coordinate, radius: Self.checkInRadius)
                         .foregroundStyle(.orange.opacity(0.15))
                         .stroke(.orange, lineWidth: 1)
-                    // 集合場所の目印(柱の根元が集合場所に来るよう anchor を下にする)
+
+                    // 経路:濃い青(太い)の上に明るい青(細い)を重ねて、ふちどりに見せる
+                    if let route {
+                        MapPolyline(route.polyline)
+                            .stroke(Color(red: 0.0, green: 0.36, blue: 0.85),
+                                    style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                        MapPolyline(route.polyline)
+                            .stroke(Color(red: 0.25, green: 0.62, blue: 1.0),
+                                    style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                    }
+
+                    // 集合場所の目印(今のまま)
                     Annotation(event.placeName, coordinate: event.coordinate, anchor: .bottom) {
                         GatherBeaconView()
                     }
-                }
-                .frame(height: 300)
 
+                    // 経路の途中に所要時間の吹き出し
+                    if let route, let routeMidpoint {
+                        Annotation("", coordinate: routeMidpoint) {
+                            Label("\(Int(route.expectedTravelTime / 60) + 1)分", systemImage: "figure.walk")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(red: 0.0, green: 0.36, blue: 0.85), in: Capsule())
+                                .overlay(Capsule().stroke(.white, lineWidth: 1.5))
+                        }
+                    }
+                }
+                .mapStyle(.standard(emphasis: .muted))   // 地図の色を控えめにして線を目立たせる
+                .frame(height: 300)
                 // ---- 情報とメンバー ----
                 List {
                     Section {
@@ -147,6 +172,14 @@ struct GatheringView: View {
                 checkInButton
                     .padding()
                     .background(.bar)
+            }
+            // 画面を開いたら、まだ到着していなければ経路を出す
+            .task {
+                if !isCheckedIn { await loadRoute() }
+            }
+            // 到着したら経路は消す
+            .onChange(of: isCheckedIn) {
+                if isCheckedIn { route = nil }
             }
             // 画面を開いている間、15秒ごとにメンバーを読み直す(閉じると自動で止まる)
             .task {
@@ -296,6 +329,39 @@ struct GatheringView: View {
     }
 
     // MARK: - 処理
+
+    // 現在地から集合場所までの徒歩ルートを取得して、全体が見えるようにする
+private func loadRoute() async {
+    guard let here = locationManager.userLocation else { return }
+    let request = MKDirections.Request()
+    request.source = MKMapItem(
+        location: CLLocation(latitude: here.latitude, longitude: here.longitude),
+        address: nil)
+    request.destination = MKMapItem(
+        location: CLLocation(latitude: event.latitude, longitude: event.longitude),
+        address: nil)
+    request.transportType = .walking
+
+    guard let found = try? await MKDirections(request: request).calculate().routes.first else { return }
+    route = found
+
+    // 最低400m四方+周りに30%の余白をとって合わせる
+    let rect = found.polyline.boundingMapRect
+    let minSize = 400 * MKMapPointsPerMeterAtLatitude(event.latitude)
+    let width = max(rect.width, minSize)
+    let height = max(rect.height, minSize)
+    let fitted = MKMapRect(x: rect.midX - width / 2, y: rect.midY - height / 2,
+                           width: width, height: height)
+    withAnimation {
+        camera = .rect(fitted.insetBy(dx: -width * 0.3, dy: -height * 0.3))
+    }
+}
+
+// 経路の真ん中あたりの点(所要時間の吹き出しを置く)
+private var routeMidpoint: CLLocationCoordinate2D? {
+    guard let line = route?.polyline, line.pointCount > 0 else { return nil }
+    return line.points()[line.pointCount / 2].coordinate
+}
 
     private func loadMembers() async {
         if let list = try? await JiifooAPI.eventMembers(eventId: event.id) {
