@@ -5,7 +5,8 @@ import AVFoundation
 // 到着したときに開く「到着の記念写真」の画面(証明書がわり)
 // 1. カメラで1枚撮る(承諾するまでは撮り直せる)
 //    カメラを許可していない・キャンセルしたときは、会場の地図を代わりに使う
-// 2. 「承諾」を押すと、写真の右下にスタンプが「ドン」と押される
+//    写真はスタンプと同じ縦横比(CertificateFrame.aspect)。撮影画面に枠を出し、撮った後に同じ範囲で切り抜く
+// 2. 「承諾」を押すと、写真全体に枠タイプのスタンプが「ドン」と押される(CertificateFrameStamp.swift)
 // 3. 写真を保存する(マイページの過去のイベントのサムネイルになる)
 struct ArrivalCertificateView: View {
     let event: CertificateEvent
@@ -28,13 +29,13 @@ struct ArrivalCertificateView: View {
             Color.black.ignoresSafeArea()
 
             if let photo {
-                // 写真(右下にスタンプを押す)
+                // 写真(写真全体に枠タイプのスタンプを押す)
                 Image(uiImage: photo)
                     .resizable()
                     .scaledToFit()
-                    .overlay(alignment: .bottomTrailing) {
+                    .overlay {
                         if step == .stamping || step == .done {
-                            CertificateStampLayer(stamp: event.stamp, isStamped: isStamped)
+                            CertificateFrameLayer(stamp: event.stamp, isStamped: isStamped)
                         }
                     }
                     .padding(.horizontal)
@@ -68,7 +69,8 @@ struct ArrivalCertificateView: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker(onCapture: { image in
-                photo = image
+                // 撮影枠と同じ範囲(スタンプと同じ縦横比)に切り抜く
+                photo = PhotoCrop.centerCrop(image, aspect: CertificateFrame.aspect)
                 isMapImage = false
                 step = .confirm
             }, onCancel: {
@@ -76,7 +78,7 @@ struct ArrivalCertificateView: View {
                 if photo == nil {
                     Task { await useMapImage() }
                 }
-            })
+            }, guideAspect: CertificateFrame.aspect)
             .ignoresSafeArea()
         }
         .alert("保存できませんでした", isPresented: $uploadFailed) {
@@ -160,7 +162,9 @@ struct ArrivalCertificateView: View {
 
     // 会場の地図を、記念の画像にする
     private func useMapImage() async {
-        photo = await VenueMapImage.make(center: event.coordinate)
+        // 地図もスタンプと同じ縦横比にそろえる(会場は真ん中なので、真ん中から切り抜く)
+        photo = PhotoCrop.centerCrop(await VenueMapImage.make(center: event.coordinate),
+                                     aspect: CertificateFrame.aspect)
         isMapImage = true
         step = .confirm
     }
