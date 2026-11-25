@@ -101,6 +101,11 @@ struct SettingsView: View {
                     } label: {
                         Label("写真のテスト", systemImage: "camera")
                     }
+                    NavigationLink {
+                        RiveTestView()
+                    } label: {
+                        Label("Rive のテスト", systemImage: "sparkles")
+                    }
                 }
 
                 // ---- ログアウト ----
