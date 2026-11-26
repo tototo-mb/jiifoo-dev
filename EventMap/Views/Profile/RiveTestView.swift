@@ -8,8 +8,7 @@ import RiveRuntime
 struct RiveTestView: View {
     @State private var values = TintyanValues()
     @State private var pinSize: CGFloat = 80          // 地図に置くときの枠の大きさ(ポイント)
-    @State private var mapDistance: Double = 1500     // 地図の高さ(m)。小さいほど寄る
-
+    @State private var mapDistance: Double = EventMapView.maxZoomOutDistance   // 地図の高さ(m)。はじめはマップ画面のいちばん引いた高さ
     // 地図に置く場所(渋谷駅のあたり)と、比べるための炎のピンの場所
     private let center = CLLocationCoordinate2D(latitude: 35.6595, longitude: 139.7005)
     private let fireCenter = CLLocationCoordinate2D(latitude: 35.6595, longitude: 139.7030)
@@ -24,6 +23,8 @@ struct RiveTestView: View {
                     Annotation("", coordinate: center, anchor: .bottom) {
                         TintyanView(values: values)
                             .frame(width: pinSize, height: pinSize)
+                            // 足元が地図の場所に来るように、下の空きの分だけ下にはみ出させる
+                            .padding(.bottom, -pinSize * TintyanView.emptyBottomRatio)
                     }
                     // 比べる用:今の炎のピン(個人)
                     Annotation("", coordinate: fireCenter, anchor: .bottom) {
@@ -33,8 +34,7 @@ struct RiveTestView: View {
                 .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
                 .frame(height: 320)
                 .listRowInsets(EdgeInsets())
-
-                valueSlider("地図の高さ(m)", value: $mapDistance, range: 300...4000, step: 50)
+                valueSlider("地図の高さ(m)", value: $mapDistance, range: 300...EventMapView.maxZoomOutDistance, step: 50)                
                 valueSlider("地図に置く枠の大きさ", value: $pinSize, range: 30...200, step: 1)
             } header: {
                 Text("地図で見る(右は今の炎のピン)")
@@ -57,6 +57,13 @@ struct RiveTestView: View {
                 valueSlider("うねりの強さ wavestrength", value: $values.waveStrength, range: 0...60, step: 0.5)
                 valueSlider("うねりの幅 wavewidth", value: $values.waveWidth, range: 0...60, step: 0.5)
                 valueSlider("うねりの速さ wavespead", value: $values.waveSpeed, range: 0...10, step: 0.1)
+                
+                valueSlider("縁取りの太さ hutidori", value: $values.outlineWidth, range: 0...20, step: 0.5)
+                ColorPicker("体の色 bodycolor", selection: $values.bodyColor, supportsOpacity: false)
+                ColorPicker("体のふちの色 bodysidecolor", selection: $values.bodySideColor, supportsOpacity: false)
+                ColorPicker("縁取りの色 huticolor", selection: $values.outlineColor, supportsOpacity: false)
+                ColorPicker("砂の色 sandcolor", selection: $values.sandColor, supportsOpacity: false)
+                ColorPicker("穴の色 holecolor", selection: $values.holeColor, supportsOpacity: false)
                 Button("はじめの数値に戻す") { values = TintyanValues() }
             } header: {
                 Text("数値")
@@ -71,8 +78,9 @@ struct RiveTestView: View {
     }
 
     // 名前・今の数値・スライダーを1行にまとめた部品
-    private func valueSlider<V: BinaryFloatingPoint>(_ title: String, value: Binding<V>,
-                                                    range: ClosedRange<V>, step: V.Stride) -> some View
+    private func valueSlider<V: BinaryFloatingPoint>(
+        _ title: String, value: Binding<V>,
+        range: ClosedRange<V>, step: V.Stride) -> some View
     where V.Stride: BinaryFloatingPoint {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -88,59 +96,5 @@ struct RiveTestView: View {
     }
 }
 
-// tintyan.riv に入れる数値(Rive の ViewModel の値)
-struct TintyanValues: Equatable {
-    var bodyTate: Float = 150      // bodytate:体の縦の長さ
-    var bodyYoko: Float = 40       // bodyyoko:体の横の太さ
-    var sandTate: Float = 10       // sandtate:砂の縦
-    var sandYoko: Float = 60       // sandyoko:砂の横
-    var swayWidth: Float = 5       // swayswidth:揺れの幅
-    var swaySpeed: Float = 1       // swaysspead:揺れの速さ
-    var waveStrength: Float = 3    // wavestrength:うねりの強さ
-    var waveWidth: Float = 10      // wavewidth:うねりの幅
-    var waveSpeed: Float = 1       // wavespead:うねりの速さ
 
-    // まとめて書き写す用の文字
-    var summary: String {
-        String(format: "体 縦%.0f 横%.0f / 砂 縦%.0f 横%.0f / 揺れ 幅%.1f 速さ%.1f / うねり 強さ%.1f 幅%.1f 速さ%.1f",
-               bodyTate, bodyYoko, sandTate, sandYoko, swayWidth, swaySpeed, waveStrength, waveWidth, waveSpeed)
-    }
-}
 
-// tintyan.riv を、数値を入れて表示する(数値が変わったらすぐ反映)
-struct TintyanView: View {
-    let values: TintyanValues
-
-    @StateObject private var riveVM = RiveViewModel(
-        fileName: "tintyan",
-        stateMachineName: "State Machine 1"
-    )
-
-    var body: some View {
-        riveVM.view()
-            .onAppear {
-                // ファイルの中の ViewModel につないで、つながったら数値を入れる
-                riveVM.riveModel?.enableAutoBind { _ in
-                    applyValues()
-                }
-                applyValues()
-            }
-            .onChange(of: values) {
-                applyValues()
-            }
-    }
-
-    // Rive の ViewModel に数値を入れる(名前は Rive エディタで付けた名前と同じにする)
-    private func applyValues() {
-        guard let instance = riveVM.riveModel?.stateMachine?.viewModelInstance else { return }
-        instance.numberProperty(fromPath: "bodytate")?.value = values.bodyTate
-        instance.numberProperty(fromPath: "bodyyoko")?.value = values.bodyYoko
-        instance.numberProperty(fromPath: "sandtate")?.value = values.sandTate
-        instance.numberProperty(fromPath: "sandyoko")?.value = values.sandYoko
-        instance.numberProperty(fromPath: "swayswidth")?.value = values.swayWidth
-        instance.numberProperty(fromPath: "swaysspead")?.value = values.swaySpeed
-        instance.numberProperty(fromPath: "wavestrength")?.value = values.waveStrength
-        instance.numberProperty(fromPath: "wavewidth")?.value = values.waveWidth
-        instance.numberProperty(fromPath: "wavespead")?.value = values.waveSpeed
-    }
-}

@@ -350,7 +350,11 @@ struct EventMapView: View {
 
     //地図に表示するイベント（読み込んだイベントかつ「マップ上で場所を見る」ボタンを押したイベント）
     private var mapEvents: [Event] {
-        let shown = eventStore.filteredEvents //絞り込みに合致するイベント
+        //絞り込みに合致して、現在地から800m以内(参加できる範囲)のイベント
+        //(現在地がまだわからないときは、全部出す)
+        let shown = eventStore.filteredEvents.filter { event in
+            locationManager.userLocation == nil || locationManager.isJoinable(event.coordinate)
+        }
         guard let focused = eventStore.focusedEvent,
             !shown.contains(where: {$0.id == focused.id }) else {
                 return shown
@@ -679,39 +683,37 @@ struct EventMapView: View {
         return String(format: "%.5f,%.5f", l.latitude, l.longitude)
     }
     
-    // ピン1つ分の見た目
-    // 法人ならBusinessPin、個人ユーザーならPrivatePinを立てる
+    // ピン1つ分の見た目(キャラクター「ちんちゃん」)
+    // ・開催前:小さく顔を出している。タップすると、なめらかに伸びて出てくる
+    // ・開催中:大きく揺れる(写真の枚数で、さらに盛り上がる)
     @ViewBuilder
     private func eventPin(for event: Event) -> some View {
-        let joinable = locationManager.isJoinable(event.coordinate)
-        // 開始時刻を過ぎたら「開催中」の目印を付ける(10秒ごとに確かめる)
+        // 開始時刻を過ぎたら「開催中」にする(10秒ごとに確かめる)
         TimelineView(.periodic(from: .now, by: 10)) { context in
-            let isLive = event.startsAt <= context.date
-            Group {
-                if isLive {
-                    // 開催中:fire_pin.riv の炎(タップは炎の根元だけ)
-                    FirePinView(style: .live) {
-                        selectPin(event)
-                    }
-                    .saturation(joinable ? 1 : 0)
-                    .opacity(joinable ? 1 : 0.6)
-                } else {
-                    // 開始前:今までの炎
-                    Group {
-                        if event.scale == .businessMode {
-                            BusinessPinView(isJoinable: joinable)
-                        } else {
-                            PrivatePinView(isJoinable: joinable)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectPin(event)
-                    }
+                        let isLive = event.startsAt <= context.date
+            // ピンの枠の大きさ(ズームインすると大きくなる。80〜160)
+            let size = 80 * pinScale
+            TintyanView(values: pinValues(for: event, isLive: isLive), animated: true)
+                .frame(width: size, height: size)
+                // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
+                .padding(.bottom, -size * TintyanView.emptyBottomRatio)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectPin(event)
                 }
-            }
-            .livePinEffect(isLive)
-            .scaleEffect(pinScale, anchor: .bottom)   // ズームインしたら大きく
+                .livePinEffect(isLive)
+        }
+    }
+
+    // ピンのキャラクターの数値(状況によって変える)
+    private func pinValues(for event: Event, isLive: Bool) -> TintyanValues {
+        if isLive {
+            // 開催中(写真の枚数はステップ2でつなぐ。今は0枚)
+            return .live(photoCount: 0, eventID: event.id)
+        } else if selectedEventID == event.id {
+            return .selected      // 開催前で、タップしているとき
+        } else {
+            return .beforeStart   // 開催前(ふだん)
         }
     }
 
@@ -766,7 +768,7 @@ struct EventMapView: View {
     private static let limitRadius: CLLocationDistance = 1000
     // いちばん引いたときのカメラの高さ(m)。半径に合わせて自動で計算する
     // (800mのとき3000mだった比率をそのまま使う)
-    private static let maxZoomOutDistance: Double = limitRadius * 3.75
+    static let maxZoomOutDistance: Double = limitRadius * 3.75   // ズームアウトの限度(テスト画面でも使うので private にしない)    
     private static let homeDistance: Double = maxZoomOutDistance   // 現在地ボタンで戻るときの高さ(m)    // ピンを選んだとき：真上から見たまま、ピンへズームする（傾けたり回したりはしない）
     private func zoomToEvent(_ event: Event) {
         cameraTask?.cancel()   // 前の動きを止める
