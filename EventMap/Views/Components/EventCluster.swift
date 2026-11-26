@@ -17,15 +17,24 @@ struct EventCluster: Identifiable {
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    // 法人のイベントが1つでも入っているか(丸の色に使う)
+    // 法人のイベントが1つでも入っているか
     var hasBusiness: Bool {
         events.contains { $0.scale == .businessMode }
     }
 
+    // 丸の色:ピンのキャラクター(ちんちゃん)の体と同じ明るい緑
+    // (TintyanValues の色を使うので、キャラの色を変えると丸の色も一緒に変わる)
+    static let color = TintyanValues().bodyColor
+
+    // この高さ(m)以上までズームアウトしたときだけ、ピンをまとめる
+    // (これより近づいているときは、全部のピンをばらして出す)
+    // ※ 現在地ボタンで戻る高さ(ふだんの高さ)は 3750m、ピンをタップしたときは 800m
+    static let clusteringMinDistance: Double = 2000
+
     // イベントを、画面の上で近いものどうしでまとめる
-    // camera: 今のカメラ(まだわからないときは、まとめない)
+    // camera: 今のカメラ(まだわからないとき・近づいているときは、まとめない)
     static func make(_ events: [Event], camera: MapCamera?, proxy: MapProxy, radius: CGFloat) -> [EventCluster] {
-        guard camera != nil else {
+        guard let camera, camera.distance >= clusteringMinDistance else {
             return events.map { EventCluster(events: [$0]) }
         }
         var groups: [(point: CGPoint, events: [Event])] = []   // まとまりの最初のピンの画面の位置と、中身
@@ -56,9 +65,9 @@ struct ClusterBubble: View {
     var body: some View {
         Text("\(cluster.count)")
             .font(.headline.bold())
-            .foregroundStyle(.white)
+            .foregroundStyle(.black)   // 明るい緑の上なので、白より黒の方が読みやすい
             .frame(width: 40, height: 40)
-            .background(cluster.hasBusiness ? Color.orange : Color.blue, in: Circle())
+            .background(EventCluster.color, in: Circle())
             .overlay(Circle().stroke(.white, lineWidth: 3))
             .shadow(radius: 3)
     }

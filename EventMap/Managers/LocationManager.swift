@@ -13,7 +13,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     override init() {
         super.init()
         manager.delegate = self   // 設定直後に didChangeAuthorization が呼ばれる
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        manager.distanceFilter = 10   // 10m 以上動いたときだけ更新
     }
 
     // MARK: - CLLocationManagerDelegate

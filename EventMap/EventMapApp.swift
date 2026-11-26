@@ -12,6 +12,11 @@ struct EventMapApp: App {
     init(){
         //通知をアプリ使用中でも表示するための設定
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+        // ピンのキャラクター(tintyan.riv)を、起動してすぐ裏で読み込んでおく
+        // (地図にピンが出た瞬間に読み込むと、そこで固まることがあるため)
+        Task.detached(priority: .userInitiated) {
+            _ = TintyanRive.file
+        }
     }
     
     

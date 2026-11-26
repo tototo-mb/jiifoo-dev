@@ -23,6 +23,7 @@ struct ScreenEdgeGlowView: View {
     var glowWidth: CGFloat = 18         // ぼけた光の太さ
     var glowBlur: CGFloat = 12          // ぼかしの強さ
     var haloOpacity: Double = 0.35      // 外側のふんわりした光の濃さ
+    var showsHalo = false               // 外側のオーラを出すか(画面全体の大きなぼかしで重いので、ふだんはオフ)
     var shimmerOpacity: Double = 0.7    // 流れる光の筋の濃さ
     var saturation: Double = 1.3        // 色の鮮やかさ（1が元の色）
     var maxOpacity: Double = 0.95       // 一番明るいときの濃さ
@@ -126,8 +127,10 @@ struct ScreenEdgeGlowView: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return ZStack {
             // 外側のふんわりしたオーラ
-            shape.stroke(lineWidth: glowWidth * 3).blur(radius: glowBlur * 2.5)
-                .opacity(haloOpacity)
+            if showsHalo {
+                shape.stroke(lineWidth: glowWidth * 3).blur(radius: glowBlur * 2.5)
+                    .opacity(haloOpacity)
+            }
             // ぼけた光
             shape.stroke(lineWidth: glowWidth * scale).blur(radius: glowBlur * scale)
             // くっきりした線
