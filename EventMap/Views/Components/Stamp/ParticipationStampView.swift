@@ -46,10 +46,45 @@ struct ParticipationStamp: Hashable {
         Self.dateFormatter.string(from: date).uppercased()
     }
 
+    // 記念写真の枠スタンプで使う日付：「2026」と「11/17」
+    var yearText: String {
+        Self.yearFormatter.string(from: date)
+    }
+
+    var monthDayText: String {
+        Self.monthDayFormatter.string(from: date)
+    }
+
+    // 「18:30」の形の時刻（イベントの開始時刻）
+    var timeText: String {
+        Self.timeFormatter.string(from: date)
+    }
+
     // 押した角度（イベントごとに決まった、少しだけ傾いた角度。-4〜4度）
     var tilt: Double {
         Double(Int(eventID.uuid.0) % 9) - 4
     }
+
+    private static let yearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy"
+        return f
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MM/dd"
+        return f
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
