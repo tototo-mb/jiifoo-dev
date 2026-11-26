@@ -1,17 +1,20 @@
 import SwiftUI
 
 // マイページの「過去に参加したイベント」のマス
-// 到着の記念写真があれば「写真＋右下にスタンプ」、なければ今までの参加スタンプを出す
+// 到着の記念写真があれば「枠タイプのスタンプを押した写真」、なければ今までの参加スタンプを出す
 
 
-// マス1つ分の見た目(正方形。写真があれば写真＋右下にスタンプ、なければスタンプだけ)
+// マス1つ分の見た目（記念写真と同じ縦横比 340：290）
+//   写真あり → 枠タイプのスタンプを押した記念写真（到着のときと同じ見た目）
+//   写真なし → 今までの参加スタンプ
 struct CertificateTile: View {
     let stamp: ParticipationStamp
     let photo: UIImage?
-        var body: some View {
-        // 正方形の透明な枠を作って、その上に写真(またはスタンプ)を重ねる
+
+    var body: some View {
+        // 記念写真と同じ比率の透明な枠を作って、その上に写真(またはスタンプ)を重ねる
         Color.clear
-            .aspectRatio(1, contentMode: .fit)            
+            .aspectRatio(CertificateFrame.aspect, contentMode: .fit)
             .overlay {
                 if let photo {
                     Image(uiImage: photo)
@@ -19,14 +22,13 @@ struct CertificateTile: View {
                         .scaledToFill()   // 枠いっぱいに広げる(はみ出た部分は下で切る)
                 } else {
                     ParticipationStampView(stamp: stamp)
-                        .padding(10)
+                        .padding(6)
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
+            .overlay {
+                // 写真の上に、枠タイプのスタンプを押した状態で重ねる（マスの大きさにぴったり合わせる）
                 if photo != nil {
-                    CertificateStampBadge(stamp: stamp)
-                        .frame(width: 72)
-                        .padding(6)
+                    CertificateFrameLayer(stamp: stamp, isStamped: true)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
