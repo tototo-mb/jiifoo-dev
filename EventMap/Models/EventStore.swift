@@ -76,11 +76,13 @@ final class EventStore {
         let liveIDs = events
             .filter { $0.startsAt <= now && now < $0.endsAt }
             .map(\.id)
+        // 中身が同じときは代入しない(代入すると地図全体が描き直されるため)
         guard !liveIDs.isEmpty else {
-            photoCounts = [:]
+            if !photoCounts.isEmpty { photoCounts = [:] }
             return
         }
-        if let counts = try? await JiifooAPI.eventPhotoCounts(eventIds: liveIDs) {
+        if let counts = try? await JiifooAPI.eventPhotoCounts(eventIds: liveIDs),
+           counts != photoCounts {
             photoCounts = counts
         }
     }

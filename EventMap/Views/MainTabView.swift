@@ -19,7 +19,7 @@ struct MainTabView: View {
             get: { selectedTab },
             set: { selectTab($0) })) {
             // 下の横長のバーは隠す(代わりに、下に浮かべたボタンで切り替える)
-            EventMapView()
+            EventMapView(isActive: selectedTab == 0)
                 .toolbar(.hidden, for: .tabBar)
                 .tabButtonsSpace()
                 .tag(0)

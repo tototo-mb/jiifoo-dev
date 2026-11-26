@@ -5,6 +5,9 @@ import MapKit
 
 // ① 地図でイベントを見る画面（旧 CurrentlocationMapView）
 struct EventMapView: View {
+    // マップのタブを表示中か(マイページなどにいる間は、追従やピンのアニメーションを止める)
+    var isActive = true
+
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventStore.self) private var eventStore
     @Environment(GatheringMode.self) private var gathering   // 集合モード（GroupModeUI.swift）
@@ -97,6 +100,10 @@ struct EventMapView: View {
         }
         // 起動時、すでに現在地がわかっていればそこへ合わせる
         .onAppear { followUser() }
+        // マップのタブに戻ってきたら、現在地に合わせ直す
+        .onChange(of: isActive) { _, active in
+            if active { followUser() }
+        }
         // 現在地が動いたら、追従中ならカメラもついていく
         .onChange(of: followKey) { _, _ in
             followUser()
@@ -686,10 +693,11 @@ struct EventMapView: View {
         }
     }
     
-    // 追従用の目印（およそ1m単位）。これが変わったらカメラを動かす
+    // 追従用の目印（およそ10m単位）。これが変わったらカメラを動かす
+    // (1m単位だと GPS のぶれでカメラが動き続けて重くなるため)
     private var followKey: String {
         guard let l = locationManager.userLocation else { return "none" }
-        return String(format: "%.5f,%.5f", l.latitude, l.longitude)
+        return String(format: "%.4f,%.4f", l.latitude, l.longitude)
     }
     
     // ピン1つ分の見た目(キャラクター「ちんちゃん」)
@@ -702,7 +710,11 @@ struct EventMapView: View {
                         let isLive = event.startsAt <= context.date
             // ピンの枠の大きさ(ズームインすると大きくなる。80〜160)
             let size = 80 * pinScale
-            TintyanView(values: pinValues(for: event, isLive: isLive), animated: true)
+            TintyanPinView(values: pinValues(for: event, isLive: isLive),
+                           usesRive: Self.animateIdlePins || isLive || selectedEventID == event.id,
+                           isSelected: selectedEventID == event.id,
+                           eventID: event.id,
+                           isPlaying: isActive)
                 .frame(width: size, height: size)
                 // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
                 .padding(.bottom, -size * TintyanView.emptyBottomRatio)
@@ -739,6 +751,10 @@ struct EventMapView: View {
         zoomToEvent(event)
     }
 
+    // 開催前で選ばれていないピンも動かすか
+    // (false: 止めた絵で表示して軽くする。ピンが多いと Rive の描画が重くなるため)
+    private static let animateIdlePins = false
+
     // カメラの高さに合わせたピンの大きさ(近づくほど大きく。最大2倍)
     // 平方根(sqrt)を使って、近づいたときに急に大きくなりすぎないようにする
     private static func pinScale(for distance: Double) -> CGFloat {
@@ -750,7 +766,7 @@ struct EventMapView: View {
 
     // 追従中なら、今の高さ(followDistance)のまま現在地を真上から映す
     private func followUser() {
-        guard isFollowing, !isReturningHome,
+        guard isActive, isFollowing, !isReturningHome,
               let userLocation = locationManager.userLocation else { return }
         let camera = MapCamera(centerCoordinate: userLocation,
                                distance: followDistance,

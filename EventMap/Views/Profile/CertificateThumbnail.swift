@@ -42,13 +42,26 @@ struct CertificateThumbnail: View {
 
     @State private var photo: UIImage?     // 到着写真(ないときは nil のまま)
 
+    // 一度読み込んだマスの写真(縮小版)を、アプリを閉じるまで覚えておく
+    // (タブを切り替えるたびにフルサイズの写真をダウンロードし直さないため)
+    private static let cache = NSCache<NSString, UIImage>()
+
     var body: some View {
         CertificateTile(stamp: ParticipationStamp(event: event), photo: photo)
             .task(id: event.id) {
+                let key = event.id.uuidString as NSString
+                if let cached = Self.cache.object(forKey: key) {
+                    photo = cached
+                    return
+                }
                 guard let userID = await JiifooAPI.currentUserID() else { return }
                 // 写真がないイベントは読み込みに失敗するので、nil のまま(スタンプを出す)
-                photo = try? await PhotoStorage.downloadImage(
-                    path: PhotoStorage.arrivalPath(eventID: event.id, userID: userID))
+                guard let image = try? await PhotoStorage.downloadImage(
+                    path: PhotoStorage.arrivalPath(eventID: event.id, userID: userID)) else { return }
+                // マスに出すだけなので、小さくしてから表示する(1600px のままだと重い)
+                let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 600, height: 600)) ?? image
+                Self.cache.setObject(thumbnail, forKey: key)
+                photo = thumbnail
             }
     }
 }

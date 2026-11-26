@@ -19,12 +19,11 @@ struct TintyanValues: Equatable {
     var outlineWidth: Float = 0    // hutidori:縁取りの太さ
 
     // 色(Rive の色の値)
-    var bodyColor: SwiftUI.Color = .black          // bodycolor:体の色
-    var bodySideColor: SwiftUI.Color = .black      // bodysidecolor:体のふちの色
-    var outlineColor: SwiftUI.Color = .black       // huticolor:縁取りの色
-    var sandColor: SwiftUI.Color = .black          // sandcolor:砂の色
-    var holeColor: SwiftUI.Color = .black          // holecolor:穴の色
-
+    var bodyColor: SwiftUI.Color = Color(red: 0x99 / 255, green: 0xFF / 255, blue: 0x04 / 255)      // bodycolor:体の色
+    var bodySideColor: SwiftUI.Color = Color(red: 0x33 / 255, green: 0xFF / 255, blue: 0x46 / 255)  // bodysidecolor:体のふちの色
+    var outlineColor: SwiftUI.Color = .black                                                       // huticolor:縁取りの色
+    var sandColor: SwiftUI.Color = Color(red: 0xF4 / 255, green: 0xE4 / 255, blue: 0xB8 / 255)      // sandcolor:砂の色
+    var holeColor: SwiftUI.Color = Color(red: 0xCD / 255, green: 0xB5 / 255, blue: 0x7C / 255)      // holecolor:穴の色
     // まとめて書き写す用の文字
     var summary: String {
         String(format: "体 縦%.0f 横%.0f / 砂 縦%.0f 横%.0f / 揺れ 幅%.1f 速さ%.1f / うねり 強さ%.1f 幅%.1f 速さ%.1f / 縁取り %.1f",
@@ -152,23 +151,47 @@ private struct SeededRandom {
 
 // MARK: - 表示
 
+// tintyan.riv はアプリ全体で1回だけ読み込んで、全部のピンで使い回す
+// (ピンごとに読み込むと、ピンの数だけファイルの読み込みと解析が走って重くなるため)
+// ※ 起動時に裏のスレッドで読み込むので、メインスレッド専用(MainActor)にしない
+nonisolated enum TintyanRive {
+    nonisolated(unsafe) static let file: RiveFile? = try? RiveFile(name: "tintyan")
+}
+
 // tintyan.riv を、数値を入れて表示する
 // animated: true なら、数値が変わったときに少し行き過ぎてから戻る動き(0.6秒)で、なめらかに変える
+// isPlaying: false なら、止めた絵として表示する(数値を変えている間だけは動かす)
 struct TintyanView: View {
     let values: TintyanValues
     var animated = false
+    var isPlaying = true
+    var initialValues: TintyanValues? = nil   // 表示したとき、ここから values へなめらかに変える(nil ならすぐ values)
+
+    init(values: TintyanValues, animated: Bool = false, isPlaying: Bool = true,
+         initialValues: TintyanValues? = nil) {
+        self.values = values
+        self.animated = animated
+        self.isPlaying = isPlaying
+        self.initialValues = initialValues
+        _riveVM = StateObject(wrappedValue: Self.makeViewModel())
+    }
+
+    private static func makeViewModel() -> RiveViewModel {
+        if let file = TintyanRive.file {
+            return RiveViewModel(RiveModel(riveFile: file), stateMachineName: "State Machine 1")
+        }
+        return RiveViewModel(fileName: "tintyan", stateMachineName: "State Machine 1")
+    }
 
     // 枠の下のあき(キャラの足元は、枠の上から78%のところにある。下の22%は空き)
     static let emptyBottomRatio: CGFloat = 0.22
     // なめらかに変える時間(秒)
     private static let duration: Double = 1.2
 
-    @StateObject private var riveVM = RiveViewModel(
-        fileName: "tintyan",
-        stateMachineName: "State Machine 1"
-    )
+    @StateObject private var riveVM: RiveViewModel
     @State private var shown: TintyanValues?          // 今 Rive に入っている数値
     @State private var change: Change?                // 変えている途中のとき(どこから・どこへ・いつから)
+    @State private var pauseToken = 0                 // 止める予約の番号(後から動かしたら、古い予約は無視する)
 
     private struct Change {
         let from: TintyanValues
@@ -189,13 +212,29 @@ struct TintyanView: View {
             riveVM.riveModel?.enableAutoBind { _ in
                 apply(shown ?? values)
             }
-            apply(values)
+            if animated, let start = initialValues, start != values {
+                apply(start)
+                play()
+                change = Change(from: start, to: values, start: .now)
+            } else {
+                apply(values)
+                if !isPlaying { pauseSoon() }
+            }
         }
         .onChange(of: values) { oldValue, newValue in
             if animated {
+                play()   // 変えている途中は動かす
                 change = Change(from: shown ?? oldValue, to: newValue, start: .now)
             } else {
                 apply(newValue)
+                if !isPlaying { pauseSoon() }
+            }
+        }
+        .onChange(of: isPlaying) { _, playing in
+            if playing {
+                play()
+            } else if change == nil {
+                pauseSoon()
             }
         }
     }
@@ -207,7 +246,23 @@ struct TintyanView: View {
         apply(change.from.mixed(with: change.to, t: Float(Self.easeOutBack(t))))
         if t >= 1 {
             self.change = nil   // 終わったら、画面の書きかえに合わせるのをやめる
+            if !isPlaying { pauseSoon() }
         }
+    }
+
+    // 新しい数値で少し描いてから止める(すぐ止めると、前の形のまま止まることがあるため)
+    private func pauseSoon() {
+        pauseToken += 1
+        let token = pauseToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if token == pauseToken && change == nil { riveVM.pause() }
+        }
+    }
+
+    // 動かす(止める予約があれば取り消す)
+    private func play() {
+        pauseToken += 1
+        riveVM.play()
     }
 
     // はじめ速く、少し行き過ぎてから戻る動き(t: 0〜1)
@@ -237,6 +292,82 @@ struct TintyanView: View {
         instance.colorProperty(fromPath: "huticolor")?.value = UIColor(values.outlineColor)
         instance.colorProperty(fromPath: "sandcolor")?.value = UIColor(values.sandColor)
         instance.colorProperty(fromPath: "holecolor")?.value = UIColor(values.holeColor)
+    }
+}
+
+// MARK: - 地図のピン
+
+// 地図のピン用
+// ・Assets に「TintyanIdle」(開催前の形を Rive から書き出した画像)があれば、
+//   動かさなくてよいピンはその画像で出す(Rive を作らないので一番軽い)
+// ・画像がまだないときは、本物の Rive を止めた状態で出す(見た目は本物と同じ)
+// ・Rive は1つ作るのが重いので、起動直後に一斉に作らず、0.12秒ずつ順番に作る
+struct TintyanPinView: View {
+    let values: TintyanValues
+    let usesRive: Bool        // 動かしたいとき(開催中・タップ中)
+    let isSelected: Bool
+    let eventID: UUID
+    var isPlaying = true      // マップのタブを表示中か
+
+    private static let hasIdleImage = TintyanStillView.image != nil
+
+    @State private var showsRive = false
+
+    var body: some View {
+        ZStack {
+            if showsRive {
+                // タップで出てきたときは、ふだんの形から伸びて出てくる
+                TintyanView(values: values,
+                            animated: true,
+                            isPlaying: isPlaying && usesRive,
+                            initialValues: isSelected ? .beforeStart : nil)
+            } else if Self.hasIdleImage {
+                TintyanStillView()
+            }
+            // 画像がなくて Rive の順番待ちの間は、何も出さない(仮の形は出さない)
+        }
+        .task(id: usesRive) {
+            if usesRive || !Self.hasIdleImage {
+                // タップしたときはすぐ出す。それ以外は順番待ちしてから作る
+                if !showsRive && !isSelected {
+                    await RiveSpawnQueue.waitTurn()
+                    guard !Task.isCancelled else { return }
+                }
+                showsRive = true
+            } else if showsRive {
+                // 縮む動き(1.2秒)が終わってから、画像に戻す
+                try? await Task.sleep(for: .seconds(1.3))
+                guard !Task.isCancelled else { return }
+                showsRive = false
+            }
+        }
+    }
+}
+
+// Rive の表示を作る順番待ち(一度にたくさん作ると固まるので、少しずつ間をあける)
+enum RiveSpawnQueue {
+    private static var next = ContinuousClock.now
+    private static let interval: Duration = .milliseconds(120)
+
+    static func waitTurn() async {
+        let now = ContinuousClock.now
+        let turn = max(next, now)
+        next = turn + interval
+        try? await Task.sleep(until: turn, clock: .continuous)
+    }
+}
+
+// 止まったときのちんちゃん(開催前のふだんの形)
+// Assets の「TintyanIdle」を使う(Rive から開催前の形を、アートボードと同じ大きさで書き出したもの)
+struct TintyanStillView: View {
+    static let image = UIImage(named: "TintyanIdle")
+
+    var body: some View {
+        if let image = Self.image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+        }
     }
 }
 
