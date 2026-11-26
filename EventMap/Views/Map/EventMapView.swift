@@ -82,7 +82,8 @@ struct EventMapView: View {
             }) { event in
                 ArrivalCertificateView(event: event)
             }
-            .animation(.easeInOut(duration: 0.4), value: isDropInGlowing)            .task(id: eventStore.arrivalEffectEvent?.id) {
+            .animation(.easeInOut(duration: 0.4), value: isDropInGlowing)            
+            .task(id: eventStore.arrivalEffectEvent?.id) {
                 guard eventStore.arrivalEffectEvent != nil else { return }
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
@@ -212,6 +213,14 @@ struct EventMapView: View {
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+        // 開催中のイベントの写真の枚数を、1分ごとに読み直す(ピンが少しずつ盛り上がる)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                await eventStore.loadPhotoCounts()
+            }
+        }
+
         // 次の集合モードが始まる時刻ぴったりにも確認する(30秒ごとだと最大30秒遅れるため)
         .task(id: eventStore.nextGatheringStart) {
             guard let start = eventStore.nextGatheringStart else { return }
@@ -708,8 +717,8 @@ struct EventMapView: View {
     // ピンのキャラクターの数値(状況によって変える)
     private func pinValues(for event: Event, isLive: Bool) -> TintyanValues {
         if isLive {
-            // 開催中(写真の枚数はステップ2でつなぐ。今は0枚)
-            return .live(photoCount: 0, eventID: event.id)
+            // 開催中(撮られた写真の枚数で盛り上がる)
+            return .live(photoCount: eventStore.photoCount(event), eventID: event.id)            
         } else if selectedEventID == event.id {
             return .selected      // 開催前で、タップしているとき
         } else {

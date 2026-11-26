@@ -11,6 +11,7 @@ final class EventStore {
     var joinedEventIDs: Set<Event.ID> = []   // 参加予定(自分が作成したものも含む)
     var myUserID: UUID?
     var checkedInEventIDs: Set<Event.ID> = [] //参加済み（会場に到着済み）のイベント
+    var photoCounts: [Event.ID: Int] = [:]   //開催中のイベントで撮られた思い出の写真の枚数(ピンの盛り上がり用)
 
     @ObservationIgnored private var isInVenue: [Event.ID: Bool] = [:] //途中参加OK型の会場の中にいるか(出入りの通知用)
     var arrivalEffectEvent: Event? //会場に初めて着いたときの演出を出しているイベント
@@ -62,10 +63,31 @@ final class EventStore {
             checkedInEventIDs = try await checkedIn
             await NotificationManager.syncGathering(with: joinedEvents)
             await GatheringActivityManager.sync(with: joinedEvents) //デバイスがロック状態時sのカウントダウン
+            await loadPhotoCounts()   //開催中のイベントの写真の枚数も読み直す
         } catch {
             message = "イベントを読み込めませんでした"
             print("イベントの読み込みに失敗:", error)
         }
+    }
+
+    // 開催中のイベントの、思い出の写真の枚数を読み込む(ピンの盛り上がりに使う)
+    func loadPhotoCounts() async {
+        let now = Date()
+        let liveIDs = events
+            .filter { $0.startsAt <= now && now < $0.endsAt }
+            .map(\.id)
+        guard !liveIDs.isEmpty else {
+            photoCounts = [:]
+            return
+        }
+        if let counts = try? await JiifooAPI.eventPhotoCounts(eventIds: liveIDs) {
+            photoCounts = counts
+        }
+    }
+
+    // 写真の枚数(まだ読み込んでいない・0枚なら 0)
+    func photoCount(_ event: Event) -> Int {
+        photoCounts[event.id] ?? 0
     }
 
     // 予約・キャンセル後や集合モード終了時に、今の場所でもう一度読み込む
