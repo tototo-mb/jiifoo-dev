@@ -297,6 +297,22 @@ nonisolated struct ReservePhotoParams: Encodable, Sendable {
     let p_lng: Double
 }
 
+// event_photo_counts に送る値
+nonisolated struct EventPhotoCountsParams: Encodable, Sendable {
+    let p_event_ids: [UUID]
+}
+
+// event_photo_counts の結果(イベントごとの思い出の写真の枚数)
+nonisolated struct EventPhotoCount: Decodable, Sendable {
+    let eventId: UUID
+    let photoCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+        case photoCount = "photo_count"
+    }
+}
+
 // ② check_in に送る値
 nonisolated struct CheckInParams: Encodable, Sendable {
     let p_event_id: UUID
@@ -673,4 +689,15 @@ enum JiifooAPI {
             .execute()
             .value
     }
+
+
+    // イベントごとの思い出の写真の枚数([イベントID: 枚数]。写真が0枚のイベントは入らない)
+    static func eventPhotoCounts(eventIds: [UUID]) async throws -> [UUID: Int] {
+        let rows: [EventPhotoCount] = try await supabase
+            .rpc("event_photo_counts", params: EventPhotoCountsParams(p_event_ids: eventIds))
+            .execute()
+            .value
+        return Dictionary(uniqueKeysWithValues: rows.map { ($0.eventId, $0.photoCount) })
+    }
+    
 }
