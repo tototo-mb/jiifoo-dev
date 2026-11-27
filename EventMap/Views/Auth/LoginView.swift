@@ -1,298 +1,127 @@
 import SwiftUI
- 
+
+// ログイン画面
+// ・ログインだけを置き、新規登録とパスワード再設定は下のボタンから別の画面へ進む
+// ・見た目の部品は AuthComponents.swift にまとめてある
 struct LoginView: View {
     @Environment(\.colorScheme) private var colorScheme
- 
+
     @State private var email = ""
     @State private var password = ""
-    @State private var displayName = ""
-    @State private var isSignUp = false
     @State private var errorMessage: String?
     @State private var isBusy = false
-    @State private var isPasswordVisible = false
- 
+    @State private var needsEmailConfirm = false   // メールの確認が終わっていないアカウントだった
+    @State private var path: [AuthRoute] = []
+
     @FocusState private var focusedField: Field?
- 
+
     private enum Field {
-        case email, password, displayName
+        case email, password
     }
- 
-    // テーマカラー（青系パレット）
-    private let primaryBlue = Color(red: 0.14, green: 0.45, blue: 0.95)
-    private let skyBlue = Color(red: 0.35, green: 0.72, blue: 0.98)
-    private let popOrange = Color(red: 1.00, green: 0.44, blue: 0.15)
- 
+
     private var isDark: Bool { colorScheme == .dark }
- 
-    private var mainTextColor: Color {
-        isDark ? .white : Color(red: 0.08, green: 0.18, blue: 0.35)
-    }
- 
-    private var subTextColor: Color {
-        isDark ? Color(red: 0.68, green: 0.76, blue: 0.88) : Color(red: 0.38, green: 0.49, blue: 0.64)
-    }
- 
-    private var cardBackground: Color {
-        isDark ? Color(red: 0.10, green: 0.14, blue: 0.22).opacity(0.96) : .white.opacity(0.96)
-    }
- 
-    private var fieldIdleBackground: Color {
-        isDark ? Color(red: 0.14, green: 0.20, blue: 0.31) : Color(red: 0.94, green: 0.97, blue: 1.00)
-    }
- 
-    private var fieldFocusedBackground: Color {
-        isDark ? Color(red: 0.16, green: 0.23, blue: 0.35) : .white
-    }
- 
+    private var theme: AuthTheme { AuthTheme(isDark: isDark) }
+    private var canSubmit: Bool { !email.authTrimmed.isEmpty && !password.isEmpty }
+
     var body: some View {
-        ZStack {
-            backgroundLayer
- 
-            VStack(spacing: 28) {
-                Spacer()
- 
-                // ロゴ（ライトモード / ダークモード切替・静止表示）
-                // ※ Assets.xcassets に「jiifooLogoLight」「jiifooLogoDark」として登録してください
-                //   （1つの Image Set で Any / Dark を設定した場合は Image("jiifooLogo") のみでOKです）
-                Image(isDark ? "jiifooLogoDark" : "jiifooLogoLight")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 58)
- 
-                // 丸みのあるシンプル入力カード
-                authCard
- 
-                // 下部モード切替リンク
-                modeSwitchLink
- 
-                Spacer()
+        NavigationStack(path: $path) {
+            ZStack {
+                AuthBackground()
+
+                VStack(spacing: 28) {
+                    Spacer()
+
+                    // ロゴ（ライトモード / ダークモード切替）
+                    Image(isDark ? "jiifooLogoDark" : "jiifooLogoLight")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 58)
+
+                    loginCard
+
+                    signUpLink
+
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
-        }
-        .tint(primaryBlue)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isSignUp)
-        .onTapGesture {
-            focusedField = nil
-        }
-        .keyboardCloseButton()
-    }
- 
-    // MARK: - 背景
-    private var backgroundLayer: some View {
-        ZStack {
-            LinearGradient(
-                colors: isDark
-                    ? [
-                        Color(red: 0.05, green: 0.08, blue: 0.14),
-                        Color(red: 0.07, green: 0.11, blue: 0.19),
-                        Color(red: 0.05, green: 0.09, blue: 0.16)
-                    ]
-                    : [
-                        Color(red: 0.91, green: 0.96, blue: 1.00),
-                        Color(red: 0.97, green: 0.99, blue: 1.00),
-                        Color(red: 0.92, green: 0.96, blue: 1.00)
-                    ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
- 
-            GeometryReader { geo in
-                Circle()
-                    .fill(skyBlue.opacity(isDark ? 0.12 : 0.18))
-                    .frame(width: 240, height: 240)
-                    .blur(radius: 30)
-                    .offset(x: -70, y: -60)
- 
-                Circle()
-                    .fill(primaryBlue.opacity(isDark ? 0.14 : 0.10))
-                    .frame(width: 220, height: 220)
-                    .blur(radius: 32)
-                    .offset(x: geo.size.width - 130, y: geo.size.height - 170)
+            .tint(AuthTheme.primaryBlue)
+            .onTapGesture { focusedField = nil }
+            .keyboardCloseButton()
+            .navigationDestination(for: AuthRoute.self) { route in
+                switch route {
+                case .signUp:
+                    SignUpFlowView()
+                case .confirmEmail(let email):
+                    SignUpView(confirmingEmail: email)
+                case .passwordReset(let email):
+                    PasswordResetView(initialEmail: email)
+                }
             }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
         }
     }
- 
+
     // MARK: - 入力カード
-    private var authCard: some View {
-        VStack(spacing: 14) {
+    private var loginCard: some View {
+        AuthCard {
             // メールアドレス
-            popTextField(
-                icon: "envelope.fill",
-                iconColor: primaryBlue,
-                field: .email
-            ) {
+            AuthField(icon: "envelope.fill", iconColor: AuthTheme.primaryBlue,
+                      isFocused: focusedField == .email) {
                 TextField("メールアドレス", text: $email)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
-                    .textContentType(.emailAddress)
+                    .textContentType(.username)   // パスワードの自動入力(キーチェーン)と組み合わせるため
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .password }
+                    .focused($focusedField, equals: .email)
             }
- 
+
             // パスワード
-            popTextField(
-                icon: "lock.fill",
-                iconColor: skyBlue,
-                field: .password
-            ) {
-                HStack(spacing: 8) {
-                    Group {
-                        if isPasswordVisible {
-                            TextField("パスワード", text: $password)
-                        } else {
-                            SecureField("パスワード", text: $password)
-                        }
-                    }
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textContentType(isSignUp ? .newPassword : .password)
- 
-                    Button {
-                        isPasswordVisible.toggle()
-                    } label: {
-                        Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(subTextColor.opacity(0.75))
-                    }
-                }
+            AuthField(icon: "lock.fill", iconColor: AuthTheme.skyBlue,
+                      isFocused: focusedField == .password) {
+                AuthPasswordInput(placeholder: "パスワード", text: $password, contentType: .password)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+                    .focused($focusedField, equals: .password)
             }
- 
-            // 表示名（新規登録時のみ表示）
-            if isSignUp {
-                popTextField(
-                    icon: "face.smiling.fill",
-                    iconColor: popOrange,
-                    field: .displayName
-                ) {
-                    TextField("表示名", text: $displayName)
-                        .textContentType(.nickname)
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
+
+            // パスワードを忘れた方
+            AuthTextButton(title: "パスワードを忘れた方") {
+                path.append(.passwordReset(email: email.authTrimmed))
             }
- 
-            // エラーメッセージ
+            .frame(maxWidth: .infinity, alignment: .trailing)
+
+            // エラー
             if let errorMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                AuthMessageBanner(message: errorMessage)
+            }
+
+            // メールの確認が終わっていなかったとき:確認コードの入力へ
+            if needsEmailConfirm {
+                AuthTextButton(title: "確認コードを入力する") {
+                    path.append(.confirmEmail(email: email.authTrimmed))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.red.opacity(isDark ? 0.16 : 0.08))
-                )
             }
- 
-            // 送信ボタン
-            Button {
-                submit()
-            } label: {
-                HStack(spacing: 8) {
-                    if isBusy {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Text(isSignUp ? "新規登録" : "ログイン")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                    }
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [primaryBlue, skyBlue],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                )
-                .shadow(color: primaryBlue.opacity(isDark ? 0.35 : 0.26), radius: 10, y: 5)
-            }
-            .buttonStyle(PopPressButtonStyle())
-            .disabled(isBusy)
-            .opacity(isBusy ? 0.65 : 1.0)
-            .padding(.top, 6)
+
+            AuthPrimaryButton(title: "ログイン", isBusy: isBusy, isEnabled: canSubmit, action: submit)
+                .padding(.top, 6)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(
-                    isDark ? skyBlue.opacity(0.20) : primaryBlue.opacity(0.12),
-                    lineWidth: 1.2
-                )
-        )
-        .shadow(color: isDark ? .black.opacity(0.35) : primaryBlue.opacity(0.08), radius: 20, y: 8)
     }
- 
-    // MARK: - 丸みのある入力フィールド共通パーツ
-    private func popTextField<Content: View>(
-        icon: String,
-        iconColor: Color,
-        field: Field,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let isFocused = (focusedField == field)
- 
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(iconColor.opacity(isFocused ? 0.22 : 0.14))
-                    .frame(width: 34, height: 34)
- 
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(iconColor)
-            }
- 
-            content()
-                .font(.system(size: 15.5, weight: .medium, design: .rounded))
-                .foregroundStyle(mainTextColor)
-                .focused($focusedField, equals: field)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            Capsule()
-                .fill(isFocused ? fieldFocusedBackground : fieldIdleBackground)
-        )
-        .overlay(
-            Capsule()
-                .stroke(
-                    isFocused ? iconColor.opacity(0.75) : primaryBlue.opacity(isDark ? 0.16 : 0.08),
-                    lineWidth: isFocused ? 1.6 : 1
-                )
-        )
-        .animation(.easeOut(duration: 0.18), value: isFocused)
-    }
- 
-    // MARK: - 下部切り替えリンク
-    private var modeSwitchLink: some View {
+
+    // MARK: - 下の「新規登録」
+    private var signUpLink: some View {
         Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                isSignUp.toggle()
-                errorMessage = nil
-            }
+            errorMessage = nil
+            path.append(.signUp)
         } label: {
             HStack(spacing: 4) {
-                Text(isSignUp ? "すでにアカウントをお持ちの方は" : "はじめての方は")
-                    .foregroundStyle(subTextColor)
-                Text(isSignUp ? "ログイン" : "新規登録")
+                Text("アカウントをお持ちでない方は")
+                    .foregroundStyle(theme.subText)
+                Text("新規登録")
                     .fontWeight(.bold)
-                    .foregroundStyle(isDark ? skyBlue : primaryBlue)
+                    .foregroundStyle(isDark ? AuthTheme.skyBlue : AuthTheme.primaryBlue)
             }
             .font(.system(size: 13.5, weight: .medium, design: .rounded))
             .padding(.horizontal, 16)
@@ -300,34 +129,37 @@ struct LoginView: View {
         }
         .disabled(isBusy)
     }
- 
-    // MARK: - 送信処理
+
+    // MARK: - ログイン
     private func submit() {
+        guard canSubmit, !isBusy else { return }
         focusedField = nil
         Task {
             isBusy = true
             errorMessage = nil
+            needsEmailConfirm = false
             do {
-                if isSignUp {
-                    try await JiifooAPI.signUp(email: email, password: password, displayName: displayName)
-                } else {
-                    try await JiifooAPI.signIn(email: email, password: password)
-                }
+                // 成功すると AuthManager がログインに気づいて、地図の画面に切り替わる
+                try await JiifooAPI.signIn(email: email.authTrimmed, password: password)
             } catch {
-                errorMessage = "入力内容に誤りがあります。内容を確認してください"
+                let code = AuthErrorText.code(of: error)
+                needsEmailConfirm = code == "email_not_confirmed"
+                // メールアドレスかパスワードが違うときは、パスワードを消して入力し直してもらう
+                // (通信エラーのときは、もう一度押すだけで済むように残しておく)
+                if code == "invalid_credentials" {
+                    password = ""
+                    focusedField = .password
+                }
+                errorMessage = AuthErrorText.message(
+                    for: error,
+                    fallback: "ログインできませんでした。通信状況を確認して、もう一度お試しください")
             }
             isBusy = false
         }
     }
 }
- 
-// MARK: - 押し心地のあるボタンスタイル
-private struct PopPressButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.65), value: configuration.isPressed)
-    }
+
+#Preview {
+    LoginView()
+        .environment(AuthManager())
 }
- 
- 

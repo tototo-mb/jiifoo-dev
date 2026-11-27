@@ -16,6 +16,7 @@ struct EventMapApp: App {
         // (地図にピンが出た瞬間に読み込むと、そこで固まることがあるため)
         Task.detached(priority: .userInitiated) {
             _ = TintyanRive.file
+            _ = Pin2Rive.file
         }
     }
     
@@ -26,7 +27,7 @@ struct EventMapApp: App {
             //SupabaseTestView()//テスト用
             Group{if authManager.isChecking == true{
                 ProgressView()
-            }else if  authManager.isLoggedIn == true{
+            }else if  authManager.isLoggedIn == true && !authManager.isResettingPassword{
                 MainTabView()
                     .environment(locationManager)
                     .environment(eventStore)
@@ -34,6 +35,7 @@ struct EventMapApp: App {
                     .environment(gathering)
             }else{
                 LoginView()
+                    .environment(authManager)   // パスワード再設定で使う
             }
             }
             .task {

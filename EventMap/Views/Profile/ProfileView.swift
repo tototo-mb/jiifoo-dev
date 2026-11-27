@@ -82,7 +82,9 @@ struct ProfileView: View {
                 PastEventDetailView(event: event)
             }
             // 表示するたびに過去のイベントを読み直す(引っ張って更新もできる)
-            .task { await loadPastEvents() }
+            // マイページのタブを開くたびに読み直す(到着した直後に開いても反映されるように)
+            // ※ タブの画面は残り続けるので、.task だと最初の1回しか読み込まれない
+            .onAppear { Task { await loadPastEvents() } }
             .refreshable { await loadPastEvents() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

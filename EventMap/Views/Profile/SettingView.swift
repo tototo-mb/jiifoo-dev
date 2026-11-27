@@ -14,6 +14,7 @@ struct SettingsView: View {
     // 画面の明るさ(0: 端末の設定に合わせる, 1: ライト, 2: ダーク)
     // EventMapApp でも同じ名前で読んで、アプリ全体に反映している
     @AppStorage("appearance") private var appearance = 0
+    @AppStorage(PinStyle.storageKey) private var pinStyle: PinStyle = .pin2   // 地図のピンの種類
 
     // 集合モードの光と振動を出すか(通知・カウントダウンはオフでも出る)
     // EventMapView・GatheringView・GroupModeUI でも同じ名前で読んでいる
@@ -83,6 +84,13 @@ struct SettingsView: View {
                         Text("ダーク").tag(2)
                     } label: {
                         Label("テーマ", systemImage: "circle.lefthalf.filled")
+                    }
+                    Picker(selection: $pinStyle) {
+                        ForEach(PinStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    } label: {
+                        Label("ピンの種類", systemImage: "mappin.and.ellipse")
                     }
                 }
 

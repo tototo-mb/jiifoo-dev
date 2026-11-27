@@ -25,8 +25,11 @@ struct FarEventsView: View {
     //startCamera:開いた時に映す場所と高さ（イベントマップと同じ）
     private let startCamera: MapCamera?
 
-    init(startCamera: MapCamera? = nil) {
+    // initialPlace:地図の画面の検索バーで選んだ場所(印を出し、「リストで見る」も出す)
+    init(startCamera: MapCamera? = nil, initialPlace: MKMapItem? = nil) {
         self.startCamera = startCamera
+        _searchedPlace = State(initialValue: initialPlace)
+        _searchText = State(initialValue: initialPlace?.name ?? "")
         let camera = startCamera
             ?? MapCamera(centerCoordinate: Self.japanCenter, distance: 3_500_000, heading:0, pitch: 0)
         _cameraPosition = State(initialValue: .camera(camera))

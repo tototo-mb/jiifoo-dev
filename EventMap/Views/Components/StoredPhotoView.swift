@@ -11,12 +11,17 @@ struct StoredPhotoView: View {
 
     @State private var image: UIImage?
     @State private var failed = false
+    // 【一時停止中】画面収録・スクショで写真を隠す機能(戻すときは /* */ を外す)
+    /*
     //画面録画、ミラーリング中か（trueの場合は写真を隠す）
     @Environment(\.isSceneCaptured) private var isCaptured
+    */
 
     var body: some View {
         ZStack {
             Rectangle().fill(.quaternary)   // 読み込み中・失敗時も枠が見えるように
+            // 【一時停止中】画面収録中は写真を出さない
+            /*
             if isCaptured {
                 // 画面収録中は写真を出さない
                 VStack(spacing: 4) {
@@ -28,13 +33,23 @@ struct StoredPhotoView: View {
                 }
                 .foregroundStyle(.secondary)
                 .padding(4)
-            } else if let image {                
+            } else
+            */
+            if let image {
+                // 【一時停止中】スクショ・画面収録に写らない表示
+                /*
                 ZStack {
                     // スクショにはこちらが写る(本物の写真は写らない)
                     ScreenshotPlaceholder()
                     ScreenshotProtectedImage(image: image)
                 }
-                .aspectRatio(image.size, contentMode: contentMode)            } else if failed {
+                .aspectRatio(image.size, contentMode: contentMode)
+                */
+                // 一時停止中は、ふつうの画像として表示する
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(image.size, contentMode: contentMode)
+            } else if failed {
                 Image(systemName: "photo")
                     .font(.title2)
                     .foregroundStyle(.secondary)
