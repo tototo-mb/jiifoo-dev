@@ -171,7 +171,7 @@ struct MapEventPin: View {
         switch pinStyle {
         case .pin2:
             // 新しいピン(pin2.riv)
-            Pin2PinView(animates: animates, isSelected: isSelected, isPlaying: isPlaying)
+        Pin2PinView(animates: animates, isSelected: isSelected, isLive: isLive, isPlaying: isPlaying)
         case .tintyan:
             // 旧ピン(ちんちゃん)
             TintyanPinView(values: tintyanValues,

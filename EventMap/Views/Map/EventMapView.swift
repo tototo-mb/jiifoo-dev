@@ -171,7 +171,6 @@ struct EventMapView: View {
         }
         
         
-        Pin2PinView(animates: animates, isSelected: isSelected, isLive: isLive, isPlaying: isPlaying)
         // まとめたピンの一覧(選んだら、一覧を閉じてからそのピンへ)
         .sheet(item: $openedCluster, onDismiss: {
             if let event = clusterPickedEvent {
