@@ -2,3 +2,6 @@ xcuserdata/
 .DS_Store
 -Xcc/
 supabase/
+
+# Claude から受け取ったファイルの控え
+Claude outputs/

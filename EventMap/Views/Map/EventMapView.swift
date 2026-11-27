@@ -779,7 +779,7 @@ struct EventMapView: View {
                 case .pin2:
                     // 新しいピン(pin2.riv)
                     let pin2Size = Pin2View.baseSize * pinScale
-                    Pin2PinView(animates: animates, isSelected: isSelected, isPlaying: isActive)
+                    Pin2PinView(animates: animates, isSelected: isSelected, isLive: isLive, isPlaying: isActive)
                         .frame(width: pin2Size, height: pin2Size)
                         // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
                         .padding(.bottom, -pin2Size * Pin2View.emptyBottomRatio)
