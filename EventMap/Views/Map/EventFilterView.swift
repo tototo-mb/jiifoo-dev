@@ -9,6 +9,12 @@ struct EventFilterView: View {
         NavigationStack {
             Form {
                 Section {
+                    Toggle("参加中のイベントだけ", isOn: Bindable(eventStore).filter.onlyJoined)
+                } footer: {
+                    Text("参加予定のイベントと、自分が主催したイベントだけを地図に表示します。")
+                }
+
+                Section {
                     ForEach(JoinType.allCases, id: \.self) { type in
                         Toggle(type.label, isOn: binding(for: type))
                     }

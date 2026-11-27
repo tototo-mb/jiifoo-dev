@@ -27,7 +27,6 @@ struct EventMapView: View {
     @State private var showCreateEvent = false
     @State private var showFarEvents = false //各地のイベントの一覧を出すか
     @State private var lastCamera: MapCamera?
-    @State private var pinScale: CGFloat = 1             // ピンの大きさ(ズームインすると大きくなる)    
     @State private var cameraTask: Task<Void, Never>?   // 実行中のカメラの動き
     @State private var isReturningHome = false          // 現在地へ戻っている最中
     @State private var savedCamera: MapCamera?          // ピンを押す前のカメラ
@@ -271,6 +270,10 @@ struct EventMapView: View {
             await eventStore.reload()
         }
 
+        // 定期的に地図を読み直す(ポーリング。中身は下の MapPolling)
+        // ピンの詳細を開いている間は休む
+        .modifier(MapPolling(eventStore: eventStore, isPaused: { selectedEventID != nil }))
+
         // 集合中のイベントがあれば、画面の上にバナーを出す
         /*.safeAreaInset(edge: .top) {
             VStack(spacing: 8) {
@@ -439,63 +442,27 @@ struct EventMapView: View {
                                maximumDistance: Self.maxZoomOutDistance)
     }
 
-    // 地図
-    //地図のボタン
+    // 地図(中身は EventMapLayer.swift)
+    // ピンのまとめの計算や、ピンの大きさの変更は EventMapLayer の中で行う
     private var mapLayer: some View {
-        MapReader { proxy in
-            // 近くのピンをまとめる(ピンが大きいほど、まとめる距離も広く)
-            let clusters = EventCluster.make(mapEvents, camera: lastCamera, proxy: proxy, radius: 40 * pinScale)
-            Map(position: $cameraPosition, bounds: cameraBounds, selection: $selectedEventID) { 
-                UserAnnotation()
-                if showJoinableRange, let userLocation = locationManager.userLocation {
-                    MapCircle(center: userLocation, radius: LocationManager.joinableRadius)
-                        .foregroundStyle(.blue.opacity(0.08))
-                        .stroke(.blue.opacity(0.5), lineWidth: 1.5)
-                }
-
-
-                ForEach(clusters) { cluster in
-                    if cluster.count == 1 {
-                        // 1つだけなら、今までのピン
-                        Annotation(cluster.events[0].title, coordinate: cluster.coordinate, anchor: .bottom) {
-                            eventPin(for: cluster.events[0])
-                        }
-                    } else {
-                        // 2つ以上なら、件数の丸(タップで一覧)
-                        Annotation("\(cluster.count)件", coordinate: cluster.coordinate) {
-                            ClusterBubble(cluster: cluster)
-                                .onTapGesture { openedCluster = cluster }
-                        }
-                    }
-                }
-            }
-            .mapControls { }
-                .mapStyle(.standard(elevation: .realistic,
-                                    emphasis: .muted,
-                                    pointsOfInterest: .including([
-                                        .publicTransport,   // 駅・バス停
-                                        .park,              // 公園
-                                        .landmark,          // ランドマーク
-                                        .castle,            // 城・史跡
-                                        .stadium,           // スタジアム・競技場
-                                        .university,        // 大学
-                                        .police,             // 交番・警察
-                                        .museum,
-                                        .theater
-                                    ])))            
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    lastCamera = context.camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
-                    // 真上から見ているときに、画面と地面の縮尺を測っておく(ピンへのズームで使う)
-                    if context.camera.pitch < 1 {
-                        measureGroundScale(proxy: proxy, distance: context.camera.distance)
-                    }
-                                        // 高さに合わせてピンの大きさを変える(動かし終わったときだけ。ふわっと)
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        pinScale = Self.pinScale(for: context.camera.distance)
-                    }
-            }
-            .ignoresSafeArea()
-        }
+        EventMapLayer(cameraPosition: $cameraPosition,
+                      selectedEventID: $selectedEventID,
+                      bounds: cameraBounds,
+                      events: mapEvents,
+                      showJoinableRange: showJoinableRange,
+                      userLocation: locationManager.userLocation,
+                      pinStyle: pinStyle,
+                      isActive: isActive,
+                      photoCounts: eventStore.photoCounts,
+                      onSelectPin: { selectPin($0) },
+                      onTapCluster: { openedCluster = $0 },
+                      onCameraEnd: { camera, proxy in
+                          lastCamera = camera   // カメラの位置だけ記録する(読み込みの基準は現在地)
+                          // 真上から見ているときに、画面と地面の縮尺を測っておく(ピンへのズームで使う)
+                          if camera.pitch < 1 {
+                              measureGroundScale(proxy: proxy, distance: camera.distance)
+                          }
+                      })
     }
 
     // 右下のボタン（フィルター・再読み込み・イベント作成・現在地）
@@ -567,7 +534,7 @@ struct EventMapView: View {
             }
             Button {
                 if let userLocation = locationManager.userLocation {
-                    Task { await eventStore.load(near: userLocation, force: true) }
+                    Task { await eventStore.load(near: userLocation, force: true, showsError: true) }
                 }
             } label: {
                 Label("再読み込み", systemImage: "arrow.clockwise")
@@ -762,60 +729,15 @@ struct EventMapView: View {
         return String(format: "%.4f,%.4f", l.latitude, l.longitude)
     }
     
-    // ピン1つ分の見た目(キャラクター「ちんちゃん」)
-    // ・開催前:小さく顔を出している。タップすると、なめらかに伸びて出てくる
-    // ・開催中:大きく揺れる(写真の枚数で、さらに盛り上がる)
-    @ViewBuilder
-    private func eventPin(for event: Event) -> some View {
-        // 開始時刻を過ぎたら「開催中」にする(10秒ごとに確かめる)
-        TimelineView(.periodic(from: .now, by: 10)) { context in
-                        let isLive = event.startsAt <= context.date
-            // ピンの枠の大きさ(ズームインすると大きくなる。80〜160)
-            let size = 80 * pinScale
-            let isSelected = selectedEventID == event.id
-            let animates = Self.animateIdlePins || isLive || isSelected
-            Group {
-                switch pinStyle {
-                case .pin2:
-                    // 新しいピン(pin2.riv)
-                    let pin2Size = Pin2View.baseSize * pinScale
-                    Pin2PinView(animates: animates, isSelected: isSelected, isLive: isLive, isPlaying: isActive)
-                        .frame(width: pin2Size, height: pin2Size)
-                        // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
-                        .padding(.bottom, -pin2Size * Pin2View.emptyBottomRatio)
-                case .tintyan:
-                    // 旧ピン(ちんちゃん)
-                    TintyanPinView(values: pinValues(for: event, isLive: isLive),
-                                   usesRive: animates,
-                                   isSelected: isSelected,
-                                   eventID: event.id,
-                                   isPlaying: isActive)
-                        .frame(width: size, height: size)
-                        .padding(.bottom, -size * TintyanView.emptyBottomRatio)
-                }
-            }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectPin(event)
-                }
-                .livePinEffect(isLive)
-        }
-    }
-
-    // ピンのキャラクターの数値(状況によって変える)
-    private func pinValues(for event: Event, isLive: Bool) -> TintyanValues {
-        if isLive {
-            // 開催中(撮られた写真の枚数で盛り上がる)
-            return .live(photoCount: eventStore.photoCount(event), eventID: event.id)            
-        } else if selectedEventID == event.id {
-            return .selected      // 開催前で、タップしているとき
-        } else {
-            return .beforeStart   // 開催前(ふだん)
-        }
-    }
-
     // ピンを押したとき:詳細を開いて、そのピンへズームする
     private func selectPin(_ event: Event) {
+        // 押したときにはもう募集が終わっていた(参加していないイベント)ときだけ知らせて、地図を最新にする
+        if !eventStore.isJoined(event) && eventStore.isRecruitmentClosed(event) {
+            eventStore.message = "このイベントの募集は終了しました"
+            Task { await eventStore.reload() }
+            return
+        }
+
         // ピンを押す前のカメラを記録（2回目以降のタップでは上書きしない）
         if savedCamera == nil {
             savedCamera = lastCamera
@@ -825,17 +747,6 @@ struct EventMapView: View {
         isFollowing = false   // ピンを見ている間は現在地に引き戻さない
         selectedEventID = event.id
         zoomToEvent(event)
-    }
-
-    // 開催前で選ばれていないピンも動かすか
-    // (false: 止めた絵で表示して軽くする。ピンが多いと Rive の描画が重くなるため)
-    private static let animateIdlePins = false
-
-    // カメラの高さに合わせたピンの大きさ(近づくほど大きく。最大2倍)
-    // 平方根(sqrt)を使って、近づいたときに急に大きくなりすぎないようにする
-    private static func pinScale(for distance: Double) -> CGFloat {
-        let scale = (homeDistance / max(distance, 1)).squareRoot()
-        return CGFloat(min(max(scale, 1), 2))
     }
 
     // MARK: - 現在地の追従
@@ -986,3 +897,37 @@ struct EventMapView: View {
 }
         
 
+
+// 地図を定期的に読み直す(ポーリング)
+// 他の人の変化(新しいイベント・参加人数・中止・編集・写真の枚数)をピンに反映するため
+// ・アプリが前に出ている間だけ動く(裏に回ると止まり、戻ると再開する)
+// ・地図の画面を離れると止まる(.task は画面が消えると取り消される)
+// ・isPaused が true の間(ピンの詳細を開いている間)や、読み込み中は1回休む
+// ※ EventMapView の body に直接書くと式が長すぎてコンパイルできないため、別に分けている
+private struct MapPolling: ViewModifier {
+    let eventStore: EventStore
+    let isPaused: () -> Bool
+    static let interval: Double = 45      // 読み直す間隔(秒)
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(Self.interval))
+                    guard !Task.isCancelled else { return }
+                    if !isPaused() && !eventStore.isLoading {
+                        await eventStore.reload()
+                    }
+                }
+            }
+            // アプリに戻ってきたときは、待たずにすぐ1回読み直す
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if oldPhase == .background && newPhase == .active {
+                    Task { await eventStore.reload() }
+                }
+            }
+    }
+}

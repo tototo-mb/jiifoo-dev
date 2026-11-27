@@ -31,10 +31,8 @@ struct CreateEventView: View {
 
  
     // 地図用
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var pickedCoordinate: CLLocationCoordinate2D?
     @State private var searchResults: [MKMapItem] = []
-    @State private var pickID: UUID?          // 選ぶたびに変わる → 3Dアニメーション開始
 
     enum PlaceInputMode: String, CaseIterable {
         case map = "マップから選択"
@@ -130,14 +128,12 @@ struct CreateEventView: View {
                     }
 
                     // どちらの方法でも、選んだ場所を確認用の地図で表示する
+                    // (平面の地図で、選んだ場所を止めて映すだけ。中身は下の PlacePreviewMap)
                     if let pickedCoordinate {
-                        Map(position: $cameraPosition) {
-                            Marker(placeName.isEmpty ? "集合場所" : placeName, coordinate: pickedCoordinate)
-                        }
-                        .mapStyle(.standard(elevation: .realistic))
-                        .orbitCamera(on: pickID, coordinate: pickedCoordinate)
-                        .frame(height: 220)
-                        .listRowInsets(EdgeInsets())
+                        PlacePreviewMap(coordinate: pickedCoordinate,
+                                        title: placeName.isEmpty ? "集合場所" : placeName)
+                            .frame(height: 220)
+                            .listRowInsets(EdgeInsets())
                     }
                 }
             }   // ← Form の終わり
@@ -147,7 +143,6 @@ struct CreateEventView: View {
                 PlacePickerMapView(coordinate: $pickedCoordinate,
                                    limitToNearby: !authManager.isCorporate)
             }
-            .onChange(of: pickedCoordinate?.latitude) { pickID = UUID() }  // ピンが変わったら3D演出
             // ↑ ここまで
             .navigationTitle("イベントを作成")
             .navigationBarTitleDisplayMode(.inline)
@@ -343,7 +338,6 @@ struct CreateEventView: View {
         hasCapacityLimit = true
         pickedCoordinate = nil
         searchResults = []
-        pickID = nil
         searchText = ""
         inputMode = .map
         joinType = .fixed
@@ -383,4 +377,26 @@ struct CreateEventView: View {
         .environment(EventStore())
         .environment(LocationManager())
         .environment(AuthManager())
+}
+
+// 選んだ場所の確認用の地図(作成画面の中)
+// ・平面の地図で、選んだ場所を真上から止めて映すだけ(3D や回り込みの演出はしない)
+// ・作成画面とは別の View に分けて、イベント名やコメントの入力で地図が設定し直されにくくしている
+// ・地図の操作(スクロール・ズーム)はできない。場所を変えるときは「マップを開いてピンを立てる」から
+private struct PlacePreviewMap: View {
+    let coordinate: CLLocationCoordinate2D
+    let title: String
+
+    var body: some View {
+        Map(initialPosition: .camera(MapCamera(centerCoordinate: coordinate,
+                                               distance: 800,
+                                               heading: 0,
+                                               pitch: 0)),
+            interactionModes: []) {
+            Marker(title, coordinate: coordinate)
+        }
+        .mapStyle(.standard(elevation: .flat))
+        // 場所が変わったら地図を作り直して、新しい場所を映す
+        .id("\(coordinate.latitude),\(coordinate.longitude)")
+    }
 }
