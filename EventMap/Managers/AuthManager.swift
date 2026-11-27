@@ -7,6 +7,9 @@ import Supabase
 final class AuthManager{
     var isLoggedIn=false
     var isChecking=true
+    // パスワード再設定の途中か
+    // (確認コードでログイン状態になっても、新しいパスワードを決めるまでは地図の画面に進まない)
+    var isResettingPassword = false
     
     //法人として投稿できる法人の一覧、個人ユーザーなら空
     var organizations:[Organization]=[]

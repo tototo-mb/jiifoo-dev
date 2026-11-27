@@ -326,12 +326,41 @@ nonisolated struct CheckInParams: Encodable, Sendable {
 enum JiifooAPI {
 
     // 新規登録(表示名はトリガーでプロフィールに入る)
-    static func signUp(email: String, password: String, displayName: String) async throws {
-        try await supabase.auth.signUp(
+    // 戻り値:メールの確認が必要なら true(確認コードがメールで届く。まだログインしていない)
+    //        Supabase で「Confirm email」がオフなら false(そのままログインになる)
+    @discardableResult
+    static func signUp(email: String, password: String, displayName: String) async throws -> Bool {
+        let response = try await supabase.auth.signUp(
             email: email,
             password: password,
             data: ["display_name": .string(displayName)]
         )
+        return response.session == nil
+    }
+
+    // 新規登録の確認コードを確かめる(成功するとログイン状態になる)
+    static func verifySignUpCode(email: String, code: String) async throws {
+        _ = try await supabase.auth.verifyOTP(email: email, token: code, type: .signup)
+    }
+
+    // 新規登録の確認コードを送り直す
+    static func resendSignUpCode(email: String) async throws {
+        try await supabase.auth.resend(email: email, type: .signup)
+    }
+
+    // パスワード再設定の確認コードを送る
+    static func sendPasswordResetCode(email: String) async throws {
+        try await supabase.auth.resetPasswordForEmail(email)
+    }
+
+    // パスワード再設定の確認コードを確かめる(成功するとログイン状態になる)
+    static func verifyPasswordResetCode(email: String, code: String) async throws {
+        _ = try await supabase.auth.verifyOTP(email: email, token: code, type: .recovery)
+    }
+
+    // パスワードを変える(ログイン中の人のもの)
+    static func updatePassword(_ newPassword: String) async throws {
+        _ = try await supabase.auth.update(user: UserAttributes(password: newPassword))
     }
 
     // ログイン

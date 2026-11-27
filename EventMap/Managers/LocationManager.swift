@@ -10,6 +10,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     var userLocation: CLLocationCoordinate2D?
     var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
+    var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy   // 「正確な位置情報」がオンか
+    var isServicesEnabled = true
+    
     override init() {
         super.init()
         manager.delegate = self   // 設定直後に didChangeAuthorization が呼ばれる
@@ -21,8 +24,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
+        let accuracy = manager.accuracyAuthorization
         Task { @MainActor in
+            self.accuracyAuthorization = accuracy
             self.handleAuthorization(status)
+            await self.refreshServicesEnabled()
         }
     }
 
@@ -64,6 +70,30 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     func isJoinable(_ coordinate:CLLocationCoordinate2D) -> Bool{
         guard let distance=distance(to: coordinate) else { return false }
         return distance <= Self.joinableRadius
+    }
+
+    // iPhone 全体の位置情報サービスがオンか調べ直す
+    // (メインスレッドで調べると画面が固まることがあるので、裏で調べる)
+    func refreshServicesEnabled() async {
+        isServicesEnabled = await Task.detached {
+            CLLocationManager.locationServicesEnabled()
+        }.value
+    }
+
+    // 位置情報が使えない理由(問題なし・まだ聞いていないときは nil)
+    var permissionProblem: LocationPermissionProblem? {
+        switch authorizationStatus {
+        case .notDetermined:
+            return nil
+        case .restricted:
+            return .restricted
+        case .denied:
+            return isServicesEnabled ? .denied : .servicesOff
+        case .authorizedAlways, .authorizedWhenInUse:
+            return accuracyAuthorization == .reducedAccuracy ? .reducedAccuracy : nil
+        @unknown default:
+            return nil
+        }
     }
 }
 

@@ -42,22 +42,16 @@ struct EventMapView: View {
     @State private var showFilter = false               // フィルター画面を表示中か
     @State private var showNearbyList = false           // 近くのイベント一覧を表示中か    
     @State private var openedCluster: EventCluster?     // 一覧を開いている、まとめたピン
+    @State private var openedDropInGuide: Event?        // 開いている途中参加OK型の集合画面
+    @State private var showsLocationPopup = false       // 位置情報の警告のポップアップを開いているか
+    @AppStorage(PinStyle.storageKey) private var pinStyle: PinStyle = .pin2   // ピンの種類(設定画面で切り替え)
+    @State private var searchedPlace: MKMapItem?        // 上の検索バーで選んだ場所(全国のイベントの地図をそこから開く)
     @State private var clusterPickedEvent: Event?       // 一覧で選んだイベント(一覧を閉じたら詳細を開く)
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             mapLayer
 
-            // 読み込み中の表示(上部中央)。集合モード中はカウントダウンの下にずらす
-            if eventStore.isLoading {
-                ProgressView()
-                    .padding(10)
-                    .background(.regularMaterial, in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-                    .padding(.top, (gathering.isActive || gatheringEvent != nil) ? 80 : 8)
-
-            }
 
             controlButtons
         }
@@ -70,9 +64,34 @@ struct EventMapView: View {
             }
         }
 
+            // 画面の上に、上から順に「検索バー → 位置情報の警告 → 到着の知らせ → 読み込み中」を並べる
+            // (集合モード中は、カウントダウンが上に出るので検索バーは隠し、その下から並べる)
             .overlay(alignment: .top) {
-                arrivalBadge
+                VStack(spacing: 8) {
+                    if !isGatheringShown {
+                        PlaceSearchBar { place in
+                            searchedPlace = place
+                            showFarEvents = true
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    // 位置情報が使えないときの警告の帯(押すと理由と「設定を開く」)
+                    if let problem = locationManager.permissionProblem {
+                        LocationWarningBanner(problem: problem) {
+                            showsLocationPopup = true
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    arrivalBadge
+                    if eventStore.isLoading {
+                        ProgressView()
+                            .padding(10)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                }
+                .padding(.top, isGatheringShown ? 80 : 8)
             }
+            .animation(.spring, value: locationManager.permissionProblem)
             // 集合場所・会場の100m以内に入ったら「到着しました」ボタン(まだ到着していないときだけ)
             .overlay(alignment: .bottom) {
                 arrivalButton
@@ -208,8 +227,11 @@ struct EventMapView: View {
 
 
         
-        .sheet(isPresented: $showFarEvents) {
-            FarEventsView(startCamera: farEventsStartCamera)
+        .sheet(isPresented: $showFarEvents, onDismiss: {
+            searchedPlace = nil   // 閉じたら、次はメニューから開いたときと同じ状態に戻す
+        }) {
+            FarEventsView(startCamera: searchedPlaceCamera ?? farEventsStartCamera,
+                          initialPlace: searchedPlace)
             .environment(eventStore)
             .environment(locationManager)
         }
@@ -268,6 +290,12 @@ struct EventMapView: View {
                 .environment(locationManager)
         }
         // 集合画面(全画面)
+        // 途中参加OK型の集合画面(全画面)
+        .fullScreenCover(item: $openedDropInGuide) { event in
+            DropInGuideView(event: event)
+                .environment(locationManager)
+                .environment(eventStore)
+        }
         .fullScreenCover(item: $openedGathering) { event in
             GatheringView(event: event)
                 .environment(locationManager)
@@ -354,6 +382,26 @@ struct EventMapView: View {
     }
 
 
+
+    // 途中参加OK型の集合画面を開けるイベント
+    // (参加予定で、開催中のもの。複数あるときは先に終わるもの)
+    private func dropInGuideEvent(at now: Date) -> Event? {
+        eventStore.joinedEvents
+            .filter { $0.joinType == .dropIn && $0.startsAt <= now && now < $0.endsAt }
+            .min { $0.endsAt < $1.endsAt }
+    }
+
+    // 集合モードのカウントダウンが上に出ているか(出ている間は、検索バーを隠して下にずらす)
+    private var isGatheringShown: Bool {
+        gathering.isActive || gatheringEvent != nil
+    }
+
+    // 検索バーで選んだ場所を映すカメラ(全国のイベントの地図の、検索で選んだときと同じ高さ)
+    private var searchedPlaceCamera: MapCamera? {
+        guard let searchedPlace else { return nil }
+        return MapCamera(centerCoordinate: searchedPlace.location.coordinate,
+                         distance: 20_000, heading: 0, pitch: 0)
+    }
 
     //イベント一覧表示機能用のカメラ
     private var farEventsStartCamera: MapCamera? {
@@ -462,6 +510,15 @@ struct EventMapView: View {
                 .accessibilityLabel("集合モード")
 
             }
+            // 途中参加OK型:参加予定で開催中のイベントがあれば、集合画面を開く(30秒ごとに確かめる)
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                if let event = dropInGuideEvent(at: context.date) {
+                    colorCircleButton(systemName: "flame.fill", color: .orange) {
+                        openedDropInGuide = event
+                    }
+                    .accessibilityLabel("集合モード(途中参加OK)")
+                }
+            }
             // 思い出の写真を撮れる時間だけ:撮影画面を開く(会場の外では灰色)
             if let photoEvent = photoEvents.first {
                 colorCircleButton(systemName: "camera.fill",
@@ -470,8 +527,13 @@ struct EventMapView: View {
                 }
                                 .accessibilityLabel("思い出カメラ")
             }
-            // メニュー(絞り込み・再読み込み・全国のイベント)
+                        // メニュー(絞り込み・再読み込み・全国のイベント)
             menuButton
+
+            // 位置情報が使えないときの警告(現在地ボタンのすぐ上)
+            if let problem = locationManager.permissionProblem {
+                LocationWarningButton(problem: problem, showsPopup: $showsLocationPopup)
+            }
 
             // 現在地ボタン
             circleButton(systemName: (isFollowing || isReturningHome) ? "location.fill" : "location") {
@@ -710,14 +772,28 @@ struct EventMapView: View {
                         let isLive = event.startsAt <= context.date
             // ピンの枠の大きさ(ズームインすると大きくなる。80〜160)
             let size = 80 * pinScale
-            TintyanPinView(values: pinValues(for: event, isLive: isLive),
-                           usesRive: Self.animateIdlePins || isLive || selectedEventID == event.id,
-                           isSelected: selectedEventID == event.id,
-                           eventID: event.id,
-                           isPlaying: isActive)
-                .frame(width: size, height: size)
-                // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
-                .padding(.bottom, -size * TintyanView.emptyBottomRatio)
+            let isSelected = selectedEventID == event.id
+            let animates = Self.animateIdlePins || isLive || isSelected
+            Group {
+                switch pinStyle {
+                case .pin2:
+                    // 新しいピン(pin2.riv)
+                    let pin2Size = Pin2View.baseSize * pinScale
+                    Pin2PinView(animates: animates, isSelected: isSelected, isPlaying: isActive)
+                        .frame(width: pin2Size, height: pin2Size)
+                        // 足元がイベントの場所に来るように、下の空きの分だけ下にはみ出させる
+                        .padding(.bottom, -pin2Size * Pin2View.emptyBottomRatio)
+                case .tintyan:
+                    // 旧ピン(ちんちゃん)
+                    TintyanPinView(values: pinValues(for: event, isLive: isLive),
+                                   usesRive: animates,
+                                   isSelected: isSelected,
+                                   eventID: event.id,
+                                   isPlaying: isActive)
+                        .frame(width: size, height: size)
+                        .padding(.bottom, -size * TintyanView.emptyBottomRatio)
+                }
+            }
                 .contentShape(Rectangle())
                 .onTapGesture {
                     selectPin(event)

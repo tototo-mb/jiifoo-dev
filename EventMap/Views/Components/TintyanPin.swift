@@ -312,32 +312,46 @@ struct TintyanPinView: View {
     private static let hasIdleImage = TintyanStillView.image != nil
 
     @State private var showsRive = false
+    @State private var riveVisible = false    // Rive の準備ができて、見せてよいか
+
+    // Rive を作ってから見せるまでの待ち時間
+    // (作った直後は読み込み中の表示が一瞬出るので、その間は画像のままにして隠す)
+    private static let revealDelay: Double = 0.4
 
     var body: some View {
         ZStack {
             if showsRive {
-                // タップで出てきたときは、ふだんの形から伸びて出てくる
-                TintyanView(values: values,
+                // 見せるまでは開催前の形のままにしておき、見せた瞬間に伸びる動きを始める
+                TintyanView(values: riveVisible || !isSelected ? values : .beforeStart,
                             animated: true,
-                            isPlaying: isPlaying && usesRive,
-                            initialValues: isSelected ? .beforeStart : nil)
-            } else if Self.hasIdleImage {
+                            isPlaying: isPlaying && usesRive)
+                    .opacity(riveVisible ? 1 : 0)
+            }
+            // 画像:Rive が見えるようになるまでは上に出しておく
+            if Self.hasIdleImage && !riveVisible {
                 TintyanStillView()
             }
             // 画像がなくて Rive の順番待ちの間は、何も出さない(仮の形は出さない)
         }
         .task(id: usesRive) {
             if usesRive || !Self.hasIdleImage {
-                // タップしたときはすぐ出す。それ以外は順番待ちしてから作る
+                // タップしたときはすぐ作る。それ以外は順番待ちしてから作る
                 if !showsRive && !isSelected {
                     await RiveSpawnQueue.waitTurn()
                     guard !Task.isCancelled else { return }
                 }
-                showsRive = true
+                if !showsRive {
+                    showsRive = true
+                    // 読み込み中の表示が終わるまで待ってから、画像と入れかえる
+                    try? await Task.sleep(for: .seconds(Self.revealDelay))
+                    guard !Task.isCancelled else { return }
+                }
+                withAnimation(.easeOut(duration: 0.15)) { riveVisible = true }
             } else if showsRive {
                 // 縮む動き(1.2秒)が終わってから、画像に戻す
                 try? await Task.sleep(for: .seconds(1.3))
                 guard !Task.isCancelled else { return }
+                riveVisible = false
                 showsRive = false
             }
         }
