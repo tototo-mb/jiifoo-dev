@@ -3,7 +3,7 @@ import MapKit
 
 // イベントのデータ型
 // Supabase の nearby_events の結果(EventPin)から作る。プレビュー用にサンプルからも作れる
-struct Event: Identifiable, Sendable {
+struct Event: Identifiable, Sendable, Equatable {   // Equatable: 読み込み直したとき、中身が同じか比べるため
     let id: UUID
     let creatorID: UUID?          // 作成者(サンプルデータでは nil)
     let organizationID: UUID?     // 法人イベントのときだけ(今は未使用)

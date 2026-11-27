@@ -108,3 +108,37 @@ struct ClusterListView: View {
         }
     }
 }
+// 地図に置くもの1つ分(1つだけのピン か、まとめた丸)
+// ・1つだけのピンの id は、必ずそのイベントの id にする
+//   (近くのピンがまとまったり離れたりしても同じピンとして扱われ、ピンの Rive が作り直されないようにするため)
+// ・まとめた丸の id は、別の名前(cluster-...)にして、1つだけのピンとぶつからないようにする
+enum MapAnnotationItem: Identifiable {
+    case single(Event)
+    case cluster(EventCluster)
+
+    var id: String {
+        switch self {
+        case .single(let event):     return event.id.uuidString
+        case .cluster(let cluster):  return "cluster-" + cluster.id.uuidString
+        }
+    }
+
+    // 1つだけのピンなら、そのイベント
+    var event: Event? {
+        if case .single(let event) = self { return event }
+        return nil
+    }
+
+    // まとめた丸なら、そのまとまり
+    var cluster: EventCluster? {
+        if case .cluster(let cluster) = self { return cluster }
+        return nil
+    }
+
+    // イベントを、画面の上で近いものどうしでまとめる(中身は EventCluster.make と同じ)
+    static func make(_ events: [Event], camera: MapCamera?, proxy: MapProxy, radius: CGFloat) -> [MapAnnotationItem] {
+        EventCluster.make(events, camera: camera, proxy: proxy, radius: radius).map { cluster in
+            cluster.count == 1 ? .single(cluster.events[0]) : .cluster(cluster)
+        }
+    }
+}

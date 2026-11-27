@@ -25,7 +25,7 @@ final class EventStore {
 
     // 絞り込み条件に合うイベント（地図に表示する分）
     var filteredEvents: [Event] {
-        events.filter(filter.matches)
+        events.filter { filter.matches($0, joinedEventIDs: joinedEventIDs) }
     }
 
 
@@ -45,7 +45,9 @@ final class EventStore {
 
     // 指定した場所の近くの募集中イベントを読み込む
     // force が false のときは、前回の場所から 300m 以上動いた場合だけ読み直す
-    func load(near center: CLLocationCoordinate2D, force: Bool = false) async {
+    // showsError: 失敗したときに「読み込めませんでした」を出すか
+    //   自分で再読み込みしたときだけ true。自動の読み直しでは出さない(次の読み直しで最新になるため)
+    func load(near center: CLLocationCoordinate2D, force: Bool = false, showsError: Bool = false) async {
         let location = CLLocation(latitude: center.latitude, longitude: center.longitude)
         if !force, let last = lastLoadedCenter, last.distance(from: location) < 300 { return }
         lastLoadedCenter = location
@@ -58,15 +60,23 @@ final class EventStore {
             async let joined = JiifooAPI.myActiveEventIDs()
             async let checkedIn = JiifooAPI.myCheckedInEventIDs()
             let serverEvents=try await pins.map(Event.init(pin: ))
-            events=serverEvents + (Self.showSampleEvents ? sampleEvents :[])
-            joinedEventIDs = try await joined
-            checkedInEventIDs = try await checkedIn
+            // 中身が前と同じときは代入しない(代入すると地図全体が描き直されるため)
+            let newEvents = serverEvents + (Self.showSampleEvents ? sampleEvents :[])
+            if newEvents != events { events = newEvents }
+            let newJoined = try await joined
+            if newJoined != joinedEventIDs { joinedEventIDs = newJoined }
+            let newCheckedIn = try await checkedIn
+            if newCheckedIn != checkedInEventIDs { checkedInEventIDs = newCheckedIn }
             await NotificationManager.syncGathering(with: joinedEvents)
             await GatheringActivityManager.sync(with: joinedEvents) //デバイスがロック状態時sのカウントダウン
             await loadPhotoCounts()   //開催中のイベントの写真の枚数も読み直す
         } catch {
-            message = "イベントを読み込めませんでした"
             print("イベントの読み込みに失敗:", error)
+            // 読み込みの途中で次の読み込みが始まって取り消された場合は、失敗ではないので何も出さない
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            if showsError {
+                message = "イベントを読み込めませんでした"
+            }
         }
     }
 
@@ -93,9 +103,19 @@ final class EventStore {
     }
 
     // 予約・キャンセル後や集合モード終了時に、今の場所でもう一度読み込む
-    func reload() async {
+    func reload(showsError: Bool = false) async {
         guard let center = lastLoadedCenter?.coordinate else { return }
-        await load(near: center, force: true)
+        await load(near: center, force: true, showsError: showsError)
+    }
+
+    // 募集が終わっているか(地図のデータが古いまま残っているときの確認に使う)
+    //   時間厳守型:集合モードが始まる(開始5分前)と締め切り
+    //   途中参加OK型:終了時刻まで参加できる
+    func isRecruitmentClosed(_ event: Event, now: Date = .now) -> Bool {
+        switch event.joinType {
+        case .fixed:  return now >= event.startsAt.addingTimeInterval(-5 * 60)
+        case .dropIn: return now >= event.endsAt
+        }
     }
 
     // MARK: - 参加状態
