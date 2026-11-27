@@ -67,7 +67,7 @@ struct PlaceSearchBar: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                TextField("地名・駅名で探す", text: $model.query)
+                TextField("全国のイベントはここから検索！！", text: $model.query)
                     .focused($focused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
