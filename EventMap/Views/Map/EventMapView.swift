@@ -171,7 +171,6 @@ struct EventMapView: View {
         }
         
         
-
         // まとめたピンの一覧(選んだら、一覧を閉じてからそのピンへ)
         .sheet(item: $openedCluster, onDismiss: {
             if let event = clusterPickedEvent {
